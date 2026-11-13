@@ -344,6 +344,7 @@ export interface ReleaseOverview {
 
 /** GET /releases/{version}. */
 export interface ReleaseDetail extends ReleaseVersion {
+	published?: boolean;
 	shipment_mr: ShipmentMR | null;
 }
 
