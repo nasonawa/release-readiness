@@ -132,6 +132,8 @@ The schema changed when the Konflux source moved to Kubernetes. Delete the old S
 
 ## v2 portfolio and validation
 
+For the v2.0 image, OpenShift manifests, operator-run Secret commands, and image updates, see [the v2 OpenShift setup guide](deploy/v2/README.md).
+
 The `v2.0` UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
 
 `GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. Load the reviewed JSON with `-validation-plan` (`VALIDATION_PLAN`). `config/quay-validation-plan.json` is the captured generator-derived plan, with its source revision and configuration links. Review/reconcile job names when updating it; new streams without a plan remain unknown. No run status is embedded in the plan.
