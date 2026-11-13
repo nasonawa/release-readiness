@@ -34,6 +34,10 @@ export function listReleasesOverview(): Promise<ReleaseOverview[]> {
 	return fetchJSON(`${BASE}/releases/overview?portfolio=1`);
 }
 
+export function listReleaseVersions(): Promise<ReleaseOverview[]> {
+	return fetchJSON(`${BASE}/releases/overview`);
+}
+
 export function getRelease(version: string): Promise<ReleaseDetail> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}`);
 }

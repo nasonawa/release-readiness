@@ -93,6 +93,7 @@ import {
 	StageFacts,
 	useNarrow,
 } from "../components/OperatorImages";
+import ReleaseWorkspace from "../components/ReleaseWorkspace";
 import { ShipmentLabels } from "../components/ShipmentLabels";
 import { Status } from "../components/Status";
 import { useSyncStatus } from "../components/SyncStatusWarning";
@@ -202,7 +203,7 @@ export default function ReleaseDetail() {
 
 	if (!release && !releaseError) {
 		return (
-			<PageSection>
+			<PageSection className="rr-page">
 				<Loading title={`Loading ${formatReleaseName(version!)}…`} />
 			</PageSection>
 		);
@@ -211,7 +212,7 @@ export default function ReleaseDetail() {
 	// Only a 404 means the release does not exist; any other failure can be retried.
 	if (!release && releaseError && !releaseError.message.startsWith("404 ")) {
 		return (
-			<PageSection>
+			<PageSection className="rr-page">
 				<LoadError
 					title="Could not load this release"
 					onRetry={() => {
@@ -229,7 +230,7 @@ export default function ReleaseDetail() {
 
 	if (!release) {
 		return (
-			<PageSection>
+			<PageSection className="rr-page">
 				<DetailBreadcrumb name={version!} />
 				<ReleaseNotFound version={version!} />
 			</PageSection>
@@ -254,7 +255,7 @@ export default function ReleaseDetail() {
 		);
 
 	return (
-		<PageSection>
+		<PageSection className="rr-page">
 			<Drawer isExpanded={!!ciCell} isInline position="end">
 				<DrawerContent
 					panelContent={
@@ -281,67 +282,72 @@ export default function ReleaseDetail() {
 						style={covered && ciCell ? { display: "none" } : undefined}
 					>
 						<DetailBreadcrumb name={release.name} />
-
-						<div style={{ marginBottom: "1rem" }}>
-							<Title headingLevel="h1" size="2xl">
-								{formatReleaseName(release.name)}
-							</Title>
-							<Freshness data={candidate.data} />
-						</div>
-
-						<ReleaseFacts
+						<ReleaseWorkspace
 							release={release}
-							shipped={candidate.data?.shipped ?? release.released}
-							shipmentMR={release.shipment_mr}
-							jiraBaseUrl={config?.jira_base_url}
-							stage={candidate.data && sharedStage(candidate.data)}
-							prod={candidate.data?.candidate?.prod}
-						/>
-
-						<BuildsCard
-							data={candidate.data}
-							error={candidate.error}
-							onRetry={candidate.refetch}
-							version={xyz}
-							issues={issues ?? []}
-							ci={ci.data}
-							konflux={konfluxUrl(
-								config?.konflux_ui_url ?? "",
-								config?.konflux_namespace ?? "",
-								app,
-							)}
-							jira={
-								config?.jira_project
-									? jiraSearchUrl(
-											ticketsJql(config.jira_project, release.name),
-											config.jira_base_url,
-										)
-									: null
-							}
-							inputs={
-								<ReleaseInputsButton unavailable={inputsUnavailable}>
-									<ReleaseInputs
-										app={app}
-										release={release.name}
-										version={xyz}
-										issues={tickets}
-										issuesError={ticketsError}
-										onRetry={refetchTickets}
-										jiraEnabled={config?.jira_enabled !== false}
-										ticketKey={release.release_ticket_key}
-										namespace={config?.konflux_namespace || "art-quay-tenant"}
-										dueDate={release.due_date}
-									/>
-								</ReleaseInputsButton>
-							}
-						/>
-
-						<TicketsCard
-							issues={tickets}
-							error={ticketsError}
-							onRetry={refetchTickets}
 							config={config}
-							ticketKey={release.release_ticket_key}
+							candidate={candidate.data}
+							candidateError={candidate.error}
+							freshness={<Freshness data={candidate.data} />}
+							facts={
+								<ReleaseFacts
+									release={release}
+									shipped={candidate.data?.shipped ?? release.released}
+									shipmentMR={release.shipment_mr}
+									jiraBaseUrl={config?.jira_base_url}
+									stage={candidate.data && sharedStage(candidate.data)}
+									prod={candidate.data?.candidate?.prod}
+								/>
+							}
+							builds={
+								<BuildsCard
+									data={candidate.data}
+									error={candidate.error}
+									onRetry={candidate.refetch}
+									version={xyz}
+									issues={issues ?? []}
+									ci={ci.data}
+									konflux={konfluxUrl(
+										config?.konflux_ui_url ?? "",
+										config?.konflux_namespace ?? "",
+										app,
+									)}
+									jira={
+										config?.jira_project
+											? jiraSearchUrl(
+													ticketsJql(config.jira_project, release.name),
+													config.jira_base_url,
+												)
+											: null
+									}
+									inputs={
+										<ReleaseInputsButton unavailable={inputsUnavailable}>
+											<ReleaseInputs
+												app={app}
+												release={release.name}
+												version={xyz}
+												issues={tickets}
+												issuesError={ticketsError}
+												onRetry={refetchTickets}
+												jiraEnabled={config?.jira_enabled !== false}
+												ticketKey={release.release_ticket_key}
+												namespace={
+													config?.konflux_namespace || "art-quay-tenant"
+												}
+												dueDate={release.due_date}
+											/>
+										</ReleaseInputsButton>
+									}
+								/>
+							}
+							tickets={
+								<TicketsCard
+									issues={tickets}
+									error={ticketsError}
+									onRetry={refetchTickets}
+									config={config}
+									ticketKey={release.release_ticket_key}
+								/>
+							}
 						/>
 					</DrawerContentBody>
 				</DrawerContent>
@@ -351,10 +357,16 @@ export default function ReleaseDetail() {
 }
 
 function DetailBreadcrumb({ name }: { name: string }) {
+	const [params] = useSearchParams();
+	const home = new URLSearchParams();
+	for (const key of ["layout", "product", "history", "q"]) {
+		const value = params.get(key);
+		if (value) home.set(key, value);
+	}
 	return (
 		<Breadcrumb style={{ marginBottom: "1rem" }}>
 			<BreadcrumbItem>
-				<Link to="/">Releases</Link>
+				<Link to={`/?${home}`}>All releases</Link>
 			</BreadcrumbItem>
 			<BreadcrumbItem isActive>{formatReleaseName(name)}</BreadcrumbItem>
 		</Breadcrumb>
@@ -526,6 +538,10 @@ function BuildsCard({
 	/** The release command button. */
 	inputs?: ReactNode;
 }) {
+	const [linkParams] = useSearchParams();
+	const ciParams = new URLSearchParams(linkParams);
+	ciParams.set("ci", "all");
+	ciParams.set("view", "workbench");
 	const fbc = data?.fbc_candidate;
 	return (
 		<Card style={{ marginBottom: "1.5rem" }}>
@@ -536,7 +552,7 @@ function BuildsCard({
 							{inputs}
 							<OpenIn
 								items={[
-									{ text: "CI history", to: { search: "ci=all" } },
+									{ text: "CI history", to: { search: ciParams.toString() } },
 									{
 										text: "Sippy",
 										href: fbc ? sippyRunsUrl(version, fbcsBuilt(fbc)) : null,
@@ -553,7 +569,9 @@ function BuildsCard({
 			>
 				<CardTitle>
 					<Title headingLevel="h2" size="xl">
-						Release candidate
+						{data?.shipped
+							? "Recorded FBCs and images"
+							: "FBC preparation and images"}
 					</Title>
 				</CardTitle>
 			</CardHeader>
@@ -744,7 +762,11 @@ function FbcMatrix({
 			{(unstaged || whole.length > 0) && (
 				<div style={{ display: "grid", gap: "0.5rem", marginBottom: "0.5rem" }}>
 					{unstaged && (
-						<span style={muted}>No stage shipment holds these FBCs yet.</span>
+						<span style={muted}>
+							{data.shipped
+								? "Historical stage shipment is not recorded; these are stream FBCs."
+								: "No stage shipment holds these FBCs yet."}
+						</span>
 					)}
 					{whole.length > 0 && <IssueNotes issues={whole} />}
 				</div>
@@ -1036,6 +1058,10 @@ function FbcChecks({
 	others: number;
 	shipment: string;
 }) {
+	const [linkParams] = useSearchParams();
+	const ciParams = new URLSearchParams(linkParams);
+	ciParams.set("view", "workbench");
+	ciParams.set("ci", `${row.operator}@${row.ocp}`);
 	const unread = row.flags.find((x) => x.text === "can't read");
 	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
 	const bundle = row.images.find((i) => i.nvr === f.head_bundle_nvr);
@@ -1125,7 +1151,7 @@ function FbcChecks({
 				{others > 0 && (
 					<div>
 						<Link
-							to={`?ci=${row.operator}@${row.ocp}`}
+							to={`?${ciParams}`}
 							style={{ display: "inline-block", padding: "4px 0" }}
 						>
 							{others} run{others === 1 ? "" : "s"} on other builds
@@ -1529,7 +1555,14 @@ function TicketsCard({
 	config?: DashboardConfig;
 	ticketKey?: string;
 }) {
-	const work = (issues ?? []).filter((i) => i.key !== ticketKey);
+	const [query, setQuery] = useState("");
+	const work = (issues ?? []).filter(
+		(i) =>
+			i.key !== ticketKey &&
+			`${i.key} ${i.summary} ${i.status}`
+				.toLowerCase()
+				.includes(query.toLowerCase()),
+	);
 	const hasIssues = work.length > 0;
 
 	return (
@@ -1539,6 +1572,13 @@ function TicketsCard({
 				{hasIssues && ` (${work.length})`}
 			</CardTitle>
 			<CardBody>
+				<TextInput
+					aria-label="Find a JIRA issue"
+					placeholder="Find a JIRA issue, status or summary"
+					value={query}
+					onChange={(_, value) => setQuery(value)}
+					style={{ marginBottom: "1rem" }}
+				/>
 				{hasIssues ? (
 					<IssuesTable issues={work} />
 				) : error ? (
@@ -1547,7 +1587,8 @@ function TicketsCard({
 						title="Could not load tickets"
 						onRetry={onRetry}
 					>
-						The fixVersion issues for this release are unavailable right now.
+						The Target Version issues for this release are unavailable right
+						now.
 					</LoadError>
 				) : !issues ? (
 					<Spinner size="md" aria-label="Loading tickets" />
@@ -1565,7 +1606,7 @@ function TicketsCard({
 					<EmptyState
 						variant="xs"
 						headingLevel="h4"
-						titleText="No linked fixVersion issues"
+						titleText="No linked Target Version issues"
 					/>
 				)}
 			</CardBody>

@@ -56,10 +56,12 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	_, published := s.selector.CatalogShippedAt(version)
 	writeJSON(w, http.StatusOK, struct {
 		*model.ReleaseVersion
+		Published  bool              `json:"published"`
 		ShipmentMR *model.ShipmentMR `json:"shipment_mr"`
-	}{release, mr})
+	}{release, published, mr})
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
