@@ -1,0 +1,62 @@
+package release
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/prow"
+)
+
+func TestValidationRequiresFullPlanAndExactIdentity(t *testing.T) {
+	plan := ValidationPlan{Revision: "reviewed", Jobs: []model.ValidationRow{{Job: "a"}, {Job: "b"}}}
+	start := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
+	later := start.Add(time.Hour)
+	candidate := &model.ReleaseCandidate{Verdict: model.Verdict{State: "ready"}, FBCCandidate: &model.FBCCandidate{Operators: []model.OperatorFBC{{Members: []model.FBCMember{{CI: &model.FBCCI{Exact: []model.CIJob{{JobName: "a", Runs: []model.CIRun{{ProwURL: "pass"}, {ProwURL: "fail"}, {ProwURL: "running"}}}}, Equivalent: []model.CIJob{{JobName: "b", Runs: []model.CIRun{{ProwURL: "other"}}}}}}}}}}}
+	runs := []prow.Run{{JobName: "a", State: "success", CompletedAt: &start, ProwURL: "pass"}, {JobName: "b", State: "success", CompletedAt: &start, ProwURL: "other"}}
+	v := EvaluateValidation(plan, candidate, runs, true)
+	if v.Ready || v.Total != 2 || v.Passed != 1 || v.Missing != 1 {
+		t.Fatalf("partial/equivalent evidence: %+v", v)
+	}
+	runs = append(runs, prow.Run{JobName: "a", State: "running", ProwURL: "running"})
+	if v = EvaluateValidation(plan, candidate, runs, true); v.Passed != 1 {
+		t.Fatal("running rerun replaced completed pass")
+	}
+	runs = append(runs, prow.Run{JobName: "a", State: "failure", CompletedAt: &later, ProwURL: "fail"})
+	if v = EvaluateValidation(plan, candidate, runs, true); v.Failed != 1 || v.Passed != 0 {
+		t.Fatal("new completed failure did not replace pass")
+	}
+	plan.Jobs = plan.Jobs[:1]
+	runs = runs[:1]
+	if !EvaluateValidation(plan, candidate, runs, true).Ready {
+		t.Fatal("complete exact plan should be ready")
+	}
+	if EvaluateValidation(plan, candidate, runs, false).Ready {
+		t.Fatal("stale sources authorized readiness")
+	}
+	candidate.Verdict.State = "not_ready"
+	if EvaluateValidation(plan, candidate, runs, true).Ready {
+		t.Fatal("FBC blocker bypassed")
+	}
+	if EvaluateValidation(ValidationPlan{}, candidate, runs, true).Ready {
+		t.Fatal("unknown plan authorized readiness")
+	}
+	runs[0].InstallFailed = true
+	if v = EvaluateValidation(plan, candidate, runs, true); v.Failed != 1 {
+		t.Fatal("installation failure treated as green")
+	}
+}
+
+func TestLoadValidationPlans(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plan.json")
+	for _, body := range []string{`{"quay-3-18":{"jobs":[{"job":"a"}]}}`, `{"quay-3-18":{"revision":"rev","jobs":[]}}`, `{"quay-3-18":{"revision":"rev","jobs":[{"job":"a"},{"job":"a"}]}}`} {
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadValidationPlans(path); err == nil {
+			t.Fatalf("accepted invalid plan: %s", body)
+		}
+	}
+}

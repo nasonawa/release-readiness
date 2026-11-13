@@ -26,7 +26,9 @@ type ReleaseOverview struct {
 	LatestBuild  *time.Time        `json:"latest_build,omitempty"`
 	// Shipped is set when the catalog published the version's tag or JIRA
 	// marks it released.
-	Shipped bool `json:"-"`
+	Shipped   bool            `json:"shipped"`
+	Published bool            `json:"published"`
+	Portfolio *PortfolioFacts `json:"portfolio,omitempty"`
 	// ShippedAt is when the catalog first published the version, nil when
 	// it has not or gave no date.
 	ShippedAt *time.Time `json:"shipped_at,omitempty"`

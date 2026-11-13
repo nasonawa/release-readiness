@@ -1,0 +1,416 @@
+{
+  "quay-5-0": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-operator-redhat-5.0-aws-ocp50-e2e-chainsaw-aws-odf-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "ODF",
+        "architecture": "amd64",
+        "mode": "Operator Chainsaw",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay-operator/quay-quay-operator-redhat-5.0__aws-ocp50-e2e-chainsaw.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-arm64-ocp50-e2e-install-aws-s3-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "arm64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-arm64-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-metal-ocp50-e2e-install-aws-metal-s3-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-metal-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-ocp50-e2e-install-aws-s3-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-ocp50-e2e-install-aws-s3-rds-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-ocp50-e2e-install-aws-s3-nightly-fips",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-ocp50-e2e-install-aws-odf-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "ODF",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-aws-ocp50-s3-upgrade-from-318",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Upgrade",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__aws-ocp50-s3-upgrade.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-azure-ocp50-e2e-install-azure-blob-nightly",
+        "ocp": "5.0",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__azure-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-azure-ocp50-e2e-install-azure-blob-postgres-nightly",
+        "ocp": "5.0",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__azure-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-5.0-gcp-ocp50-e2e-install-gcp-gcs-nightly",
+        "ocp": "5.0",
+        "cloud": "GCP",
+        "storage": "GCS",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-5.0__gcp-ocp50-e2e-install.yaml"
+      }
+    ]
+  },
+  "quay-3-10": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.10-aws-ocp415-e2e-legacy-aws-s3",
+        "ocp": "4.15",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Legacy validation",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.10__aws-ocp415-e2e-legacy.yaml"
+      }
+    ]
+  },
+  "quay-3-12": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.12-aws-ocp417-e2e-legacy-aws-s3",
+        "ocp": "4.17",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Legacy validation",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.12__aws-ocp417-e2e-legacy.yaml"
+      }
+    ]
+  },
+  "quay-3-14": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.14-aws-ocp419-e2e-legacy-aws-s3",
+        "ocp": "4.19",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Legacy validation",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.14__aws-ocp419-e2e-legacy.yaml"
+      }
+    ]
+  },
+  "quay-3-15": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.15-aws-ocp419-e2e-legacy-aws-s3",
+        "ocp": "4.19",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Legacy validation",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.15__aws-ocp419-e2e-legacy.yaml"
+      }
+    ]
+  },
+  "quay-3-16": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.16-aws-ocp421-e2e-install-aws-s3-nightly",
+        "ocp": "4.21",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.16__aws-ocp421-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.16-aws-ocp421-e2e-install-aws-odf-nightly",
+        "ocp": "4.21",
+        "cloud": "AWS",
+        "storage": "ODF",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.16__aws-ocp421-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.16-azure-ocp421-e2e-install-azure-blob-nightly",
+        "ocp": "4.21",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.16__azure-ocp421-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.16-gcp-ocp421-e2e-install-gcp-gcs-nightly",
+        "ocp": "4.21",
+        "cloud": "GCP",
+        "storage": "GCS",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.16__gcp-ocp421-e2e-install.yaml"
+      }
+    ]
+  },
+  "quay-3-17": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-rds-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-odf-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "ODF",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly-fips",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-s3-upgrade-from-316",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Upgrade",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__aws-ocp422-s3-upgrade.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-azure-ocp422-e2e-install-azure-blob-nightly",
+        "ocp": "4.22",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__azure-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-azure-ocp422-e2e-install-azure-blob-postgres-nightly",
+        "ocp": "4.22",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__azure-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.17-gcp-ocp422-e2e-install-gcp-gcs-nightly",
+        "ocp": "4.22",
+        "cloud": "GCP",
+        "storage": "GCS",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.17__gcp-ocp422-e2e-install.yaml"
+      }
+    ]
+  },
+  "quay-3-18": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-arm64-ocp422-e2e-install-aws-s3-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "arm64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-arm64-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp414-e2e-install-aws-s3-nightly",
+        "ocp": "4.14",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp414-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-rds-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly-fips",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-odf-nightly",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "ODF",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-s3-upgrade-from-317",
+        "ocp": "4.22",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Upgrade",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp422-s3-upgrade.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-ocp50-e2e-install-aws-s3-nightly",
+        "ocp": "5.0",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-ocp50-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-aws-standalone-ha-e2e",
+        "ocp": "Not applicable",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Standalone HA",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__aws-standalone-ha.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-azure-ocp422-e2e-install-azure-blob-nightly",
+        "ocp": "4.22",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__azure-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-azure-ocp422-e2e-install-azure-blob-postgres-nightly",
+        "ocp": "4.22",
+        "cloud": "Azure",
+        "storage": "Azure Blob",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__azure-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-gcp-ocp422-e2e-install-gcp-gcs-nightly",
+        "ocp": "4.22",
+        "cloud": "GCP",
+        "storage": "GCS",
+        "architecture": "amd64",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__gcp-ocp422-e2e-install.yaml"
+      },
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.18-libvirt-s390x-ocp422-e2e-install-libvirt-s3-nightly",
+        "ocp": "4.22",
+        "cloud": "Libvirt",
+        "storage": "S3",
+        "architecture": "s390x",
+        "mode": "Operator install",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.18__libvirt-s390x-ocp422-e2e-install.yaml"
+      }
+    ]
+  },
+  "quay-3-9": {
+    "revision": "f2a5b18ef9eb10c12907bcf97900090e89b40603",
+    "jobs": [
+      {
+        "job": "periodic-ci-quay-quay-redhat-3.9-aws-ocp414-e2e-legacy-aws-s3",
+        "ocp": "4.14",
+        "cloud": "AWS",
+        "storage": "S3",
+        "architecture": "amd64",
+        "mode": "Legacy validation",
+        "source_url": "https://github.com/openshift/release/blob/f2a5b18ef9eb10c12907bcf97900090e89b40603/ci-operator/config/quay/quay/quay-quay-redhat-3.9__aws-ocp414-e2e-legacy.yaml"
+      }
+    ]
+  }
+}

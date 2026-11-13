@@ -90,11 +90,17 @@ func main() {
 	jiraWriteEmail := flag.String("jira-write-email", os.Getenv("JIRA_WRITE_EMAIL"), "JIRA Cloud account email of the write credential")
 	jiraWriteToken := flag.String("jira-write-token", os.Getenv("JIRA_WRITE_TOKEN"), "JIRA Cloud API token of the write credential, never the -jira-token one")
 
+	validationPlanPath := flag.String("validation-plan", os.Getenv("VALIDATION_PLAN"), "reviewed required Prow job plan JSON; empty leaves full-matrix readiness unknown")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
 
+	validationPlans, err := release.LoadValidationPlans(*validationPlanPath)
+	if err != nil {
+		logger.Error("read validation plan", "error", err)
+		os.Exit(1)
+	}
 	prowJobList, err := prow.ParseJobs(*prowJobs)
 	if err != nil {
 		logger.Error("parse -prow-jobs", "error", err)
@@ -260,6 +266,7 @@ func main() {
 	selector.ArtBaseURL = *artURL
 	selector.StageReleasePlanPattern = stagePlans
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, selector, status, logger)
+	srv.ValidationPlans = validationPlans
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
 

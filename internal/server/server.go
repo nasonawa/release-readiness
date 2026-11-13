@@ -26,7 +26,8 @@ type Server struct {
 	KonfluxUIURL, KonfluxNamespace string
 	// ArtFBC looks up the tags ART publishes its FBC images under; nil turns
 	// the lookup off.
-	ArtFBC *artfbc.Client
+	ArtFBC          *artfbc.Client
+	ValidationPlans map[string]release.ValidationPlan
 }
 
 // New builds the server.
