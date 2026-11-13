@@ -94,8 +94,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 	const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
 	const header = (
-		// Inline at every width, so phone width keeps the masthead on one row.
-		<Masthead display={{ default: "inline" }}>
+		// Give the brand and utility controls separate rows on narrow screens.
+		<Masthead display={{ default: "stack", md: "inline" }}>
 			<MastheadMain>
 				<MastheadBrand>
 					<a

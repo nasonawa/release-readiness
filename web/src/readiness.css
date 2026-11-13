@@ -73,7 +73,7 @@ body {
 	justify-content: flex-start;
 	margin: 1.5rem 0 0.8rem;
 }
-.rr-portfolio-tools label {
+.rr-portfolio-tools label:not(.pf-v6-c-switch) {
 	display: flex;
 	gap: 0.6rem;
 	align-items: center;
@@ -401,7 +401,11 @@ body {
 	.rr-brand-subtitle {
 		font-size: 0.75rem;
 	}
-	.pf-v6-c-page > .pf-v6-c-masthead {
-		--pf-v6-c-masthead--m-display-inline--GridTemplateColumns: 1fr;
+	.rr-portfolio-tools .pf-v6-c-form-control {
+		width: 100%;
+		min-width: 0;
+	}
+	.rr-release-card {
+		overflow-wrap: anywhere;
 	}
 }

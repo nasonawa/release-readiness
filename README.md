@@ -137,3 +137,48 @@ The `v2.0` UI groups product streams into cards and concrete z-streams into rele
 `GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. Load the reviewed JSON with `-validation-plan` (`VALIDATION_PLAN`). `config/quay-validation-plan.json` is the captured generator-derived plan, with its source revision and configuration links. Review/reconcile job names when updating it; new streams without a plan remain unknown. No run status is embedded in the plan.
 
 Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources, and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The new projection is advisory and does not execute a shipment or write to JIRA.
+
+The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.z`, latest available release, and expandable z-stream records. Stages display concrete `x.y.z` releases; **Show history** adds older records. Opening either goes to the same exact-release workspace: release briefing, validation workbench, and searchable JIRA issues. Links preserve the portfolio layout, product, and history selection. Motion respects the system reduced-motion preference.
+
+```mermaid
+flowchart LR
+    A[ART builds] --> K[Konflux snapshots and stage releases]
+    K --> P[Prow runs against candidate images]
+    G[Reviewed generator job plan] --> V[Full-matrix validation]
+    P --> D[(SQLite ingestion)]
+    K --> D
+    J[JIRA release scope] --> D
+    D --> V
+    V --> U[Portfolio and exact-release workspace]
+    U --> M[Human shipment MR review]
+    M --> R[Quay and operator publication]
+    R --> C[Red Hat catalog confirmation]
+    C --> U
+```
+
+The plan establishes the expected denominator; it does not enable Prow ingestion. Configure `PROW_JOBS` or `PROW_JOB_PATTERN` separately. Exact-FBC identity is currently the supported gating adapter. Standalone/image-only jobs stay awaiting evidence until their image-identity adapter is implemented. Plans for OMR and newly added streams must be supplied explicitly. The UI distinguishes missing historical FBC records or stream fallback FBCs from confirmed release-specific publication.
+
+### Local v2 Compose review
+
+`compose.yaml` builds the embedded SPA and Go server together using `deploy/Containerfile`, binds only to localhost, mounts the reviewed validation plan, and forces `JIRA_WRITE=false`. Provide `.env` with the read credentials described above (an empty file is valid, but a fresh DB will have no releases without JIRA). The mounted kubeconfig must point to Konflux with the read permissions listed above. Nothing is deployed to OpenShift.
+
+```bash
+# 8089 allows the previous 8088 app to remain available for comparison.
+RR_PORT=8089 docker compose -p release-readiness-v2 up -d --build
+# Or use podman compose with its Docker-compatible Compose provider.
+RR_PORT=8089 docker compose -p release-readiness-v2 down
+```
+
+The default named volume is isolated by Compose project name. To review an existing dataset, set `RR_DATA_DIR` to a separate directory containing an SQLite backup named `release-readiness.db`; do not share a running service's database file. The SELinux setting applies only to this local container so the existing kubeconfig is not relabeled. Build-context ignore files exclude credentials, databases, and prototype artifacts.
+
+Browser tests can target the built container:
+
+```bash
+cd web
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:8089 npm run test:e2e
+# If using a system browser instead of Playwright's downloaded Chromium:
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:8089 \
+  PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome npm run test:e2e
+```
+
+These tests intercept API responses inside the test browser for deterministic edge cases; the running app uses the real API. With no `PLAYWRIGHT_BASE_URL`, Playwright starts the Vite development server as before.
