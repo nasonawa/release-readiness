@@ -35,9 +35,11 @@ import {
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
+import { useConfig } from "./hooks/useConfig";
+import "./readiness.css";
 import "./theme.css";
 
-const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
+const ReleasesOverview = lazy(() => import("./pages/ReleasePortfolio"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 // Dev builds only: the condition is false in a production build, so the
 // mockups chunk is never emitted.
@@ -77,6 +79,7 @@ function getInitialTheme(): Theme {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
 	const [theme, setTheme] = useState<Theme>(getInitialTheme);
+	const config = useConfig();
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -107,7 +110,10 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 						}}
 					>
 						<img src="/favicon.png" alt="Quay" style={{ height: 32 }} />
-						Release Readiness
+						<span>
+							Red Hat Quay
+							<small className="rr-brand-subtitle">Release readiness</small>
+						</span>
 					</a>
 				</MastheadBrand>
 			</MastheadMain>
@@ -128,7 +134,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 						</ToolbarItem>
 						<ToolbarItem>
 							<Popover
-								headerContent="About this dashboard"
+								headerContent={`Release readiness ${config?.app_version || "2.0.0-dev"}`}
 								maxWidth="36rem"
 								bodyContent={
 									<>
@@ -137,6 +143,15 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 											Snapshots and Releases, ART build history, Prow periodics,
 											Jira.
 										</Content>
+										<p>
+											<a
+												href="https://github.com/quay/release-readiness/issues/new"
+												target="_blank"
+												rel="noreferrer"
+											>
+												Send feedback or report an issue ↗
+											</a>
+										</p>
 										<DescriptionList isCompact style={{ marginTop: "1rem" }}>
 											{glossary.map(([term, desc]) => (
 												<DescriptionListGroup key={term}>
@@ -158,7 +173,16 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 						<ToolbarItem>
 							<Button
 								variant="plain"
-								aria-label="Toggle dark mode"
+								aria-label={
+									theme === "light"
+										? "Switch to dark theme"
+										: "Switch to light theme"
+								}
+								title={
+									theme === "light"
+										? "Switch to dark theme"
+										: "Switch to light theme"
+								}
 								onClick={toggleTheme}
 							>
 								{theme === "light" ? <MoonIcon /> : <SunIcon />}

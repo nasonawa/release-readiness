@@ -299,7 +299,39 @@ export interface ShipmentMR {
 	source: "pointer" | "search";
 }
 
+export interface Validation {
+	plan_known: boolean;
+	revision: string;
+	source_fresh: boolean;
+	ready: boolean;
+	total: number;
+	passed: number;
+	failed: number;
+	running: number;
+	missing: number;
+	rows?: ValidationRow[];
+}
+export interface ValidationRow {
+	job: string;
+	ocp: string;
+	cloud: string;
+	storage: string;
+	architecture: string;
+	mode: string;
+	source_url: string;
+	state: "passed" | "failed" | "running" | "missing";
+	run_url?: string;
+}
+export interface PortfolioFacts {
+	stage: "validation" | "shipment" | "available";
+	verdict: Verdict;
+	validation: Validation;
+	error?: string;
+}
 export interface ReleaseOverview {
+	published?: boolean;
+	shipped?: boolean;
+	portfolio?: PortfolioFacts;
 	release: ReleaseVersion;
 	issue_summary?: IssueSummary;
 	readiness: ReadinessResponse;
@@ -316,6 +348,7 @@ export interface ReleaseDetail extends ReleaseVersion {
 }
 
 export interface DashboardConfig {
+	app_version?: string;
 	jira_base_url: string;
 	jira_project: string;
 	jira_enabled: boolean;

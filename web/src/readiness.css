@@ -1,0 +1,407 @@
+:root {
+	--rr-panel: var(--pf-t--global--background--color--primary--default);
+	--rr-bg: var(--pf-t--global--background--color--secondary--default);
+	--rr-line: var(--pf-t--global--border--color--default);
+	--rr-muted: var(--pf-t--global--text--color--subtle);
+	--rr-blue: var(--pf-t--global--color--brand--default);
+	--rr-green: var(--pf-t--global--color--status--success--default);
+	--rr-red: var(--pf-t--global--color--status--danger--default);
+	font-size: 17px;
+}
+body {
+	line-height: 1.6;
+}
+.rr-brand-subtitle {
+	display: block;
+	font-size: 0.85rem;
+	font-weight: 400;
+}
+.rr-page.pf-v6-c-page__main-section {
+	background: var(--rr-bg);
+	padding: 2rem;
+}
+.rr-page > *,
+.rr-workspace > * {
+	min-width: 0;
+}
+.rr-page h1 {
+	font-family: "Red Hat Display", sans-serif;
+	font-size: 2rem;
+}
+.rr-muted {
+	color: var(--rr-muted);
+	font-size: 0.9rem;
+}
+.rr-portfolio-heading,
+.rr-card-heading,
+.rr-portfolio-tools {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.rr-portfolio-heading {
+	margin-bottom: 1.5rem;
+}
+.rr-portfolio-heading p {
+	margin-top: 0.4rem;
+}
+.rr-portfolio-summary {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 1.5rem;
+	border-block: 1px solid var(--rr-line);
+	padding-block: 1.3rem;
+}
+.rr-portfolio-summary > div {
+	display: flex;
+	gap: 0.8rem;
+	align-items: baseline;
+	flex-wrap: wrap;
+}
+.rr-portfolio-summary strong {
+	font:
+		500 2rem "Red Hat Display",
+		sans-serif;
+}
+.rr-portfolio-summary span {
+	color: var(--rr-muted);
+	font-size: 0.9rem;
+}
+.rr-portfolio-tools {
+	justify-content: flex-start;
+	margin: 1.5rem 0 0.8rem;
+}
+.rr-portfolio-tools label {
+	display: flex;
+	gap: 0.6rem;
+	align-items: center;
+}
+.rr-portfolio-tools select,
+.rr-workspace select {
+	padding: 0.5rem;
+	color: inherit;
+	background: var(--rr-panel);
+	border: 1px solid var(--rr-line);
+	border-radius: 4px;
+	font: inherit;
+	max-width: 100%;
+}
+.rr-portfolio-tools .pf-v6-c-form-control {
+	max-width: 22rem;
+}
+.rr-scope-note {
+	margin-bottom: 1.5rem;
+}
+.rr-card-grid,
+.rr-stage-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 1.2rem;
+	align-items: start;
+}
+.rr-portfolio-content {
+	isolation: isolate;
+	overflow-anchor: none;
+}
+.rr-release-card {
+	padding: 1.25rem;
+	border: 1px solid var(--rr-line);
+	border-radius: 10px;
+	background: var(--rr-panel);
+	position: relative;
+	min-width: 0;
+}
+.rr-release-card h2,
+.rr-release-card h3 {
+	font:
+		600 1.4rem / 1.4 "Red Hat Display",
+		sans-serif;
+}
+.rr-release-card h2 a,
+.rr-release-card h3 a {
+	color: inherit;
+}
+.rr-card-heading {
+	gap: 0.6rem;
+}
+.rr-card-target {
+	margin: 1rem 0;
+}
+.rr-card-target strong {
+	display: block;
+	font-size: 1.1rem;
+}
+.rr-progress-track {
+	height: 9px;
+	border-radius: 6px;
+	overflow: hidden;
+	background: var(--rr-line);
+	display: flex;
+	margin: 0.7rem 0;
+}
+.rr-progress-track > span {
+	display: block;
+}
+.rr-progress-track .passed {
+	background: var(--rr-green);
+}
+.rr-progress-track .failed {
+	background: var(--rr-red);
+}
+.rr-progress-track .running {
+	background: var(--rr-blue);
+}
+.rr-progress-track .missing {
+	background: var(--pf-t--global--color--status--warning--default);
+}
+.rr-validation-progress {
+	margin-block: 1rem;
+}
+.rr-card-facts {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.5rem 1rem;
+	flex-wrap: wrap;
+	padding-top: 0.8rem;
+	border-top: 1px solid var(--rr-line);
+	margin-top: 1rem;
+}
+.rr-card-facts + p {
+	margin-top: 0.5rem;
+}
+.rr-card-action {
+	display: inline-block;
+	margin-top: 1rem;
+	font-weight: 500;
+}
+.rr-latest {
+	margin-top: 1rem;
+	font-size: 0.95rem;
+}
+.rr-stream-history {
+	border-top: 1px solid var(--rr-line);
+	margin-top: 1.2rem;
+	padding-top: 0.8rem;
+}
+.rr-stream-history summary {
+	cursor: pointer;
+}
+.rr-stream-history li {
+	display: flex;
+	gap: 0.3rem 0.8rem;
+	flex-wrap: wrap;
+	padding: 0.8rem 0;
+	border-bottom: 1px solid var(--rr-line);
+}
+.rr-stage-heading {
+	border-top: 3px solid var(--rr-blue);
+	min-height: 10rem;
+	padding-top: 1rem;
+}
+.rr-stage-heading h2 {
+	font:
+		500 1.3rem "Red Hat Display",
+		sans-serif;
+	margin: 0.6rem 0;
+}
+.rr-stage-heading p,
+.rr-stage-heading span {
+	color: var(--rr-muted);
+	font-size: 0.9rem;
+}
+.rr-stage-lane.shipment .rr-stage-heading {
+	border-color: var(--rr-green);
+}
+.rr-stage-lane.available .rr-stage-heading {
+	border-color: var(--rr-muted);
+}
+.rr-stage-items {
+	display: grid;
+	gap: 1rem;
+}
+.rr-stage-empty {
+	padding: 1.5rem;
+	border: 1px dashed var(--rr-line);
+	border-radius: 8px;
+	color: var(--rr-muted);
+}
+.rr-workspace {
+	max-width: 1600px;
+	margin: auto;
+	width: 100%;
+}
+.rr-source-links {
+	display: flex;
+	gap: 0.7rem 1.3rem;
+	flex-wrap: wrap;
+	margin: 1rem 0 1.5rem;
+}
+.rr-workspace .rr-source-links a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+.rr-decision {
+	display: grid;
+	grid-template-columns: 1.15fr 1fr;
+	gap: 2rem;
+	background: var(--rr-panel);
+	border: 1px solid var(--rr-line);
+	border-left: 5px solid var(--rr-red);
+	border-radius: 12px;
+	padding: 2rem;
+	margin-block: 1.5rem;
+}
+.rr-decision.ready,
+.rr-decision.published {
+	border-left-color: var(--rr-green);
+}
+.rr-decision h2 {
+	font:
+		500 1.65rem / 1.4 "Red Hat Display",
+		sans-serif;
+	margin: 0.7rem 0;
+}
+.rr-decision p {
+	margin: 0.6rem 0;
+}
+.rr-decision-coverage {
+	padding-left: 2rem;
+	border-left: 1px solid var(--rr-line);
+	align-self: center;
+}
+.rr-decision-actions {
+	display: flex;
+	gap: 0.7rem;
+	flex-wrap: wrap;
+	margin-top: 1.2rem;
+}
+.rr-release-flow {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	border: 1px solid var(--rr-line);
+	border-radius: 8px;
+	background: var(--rr-panel);
+	margin: 1.5rem 0;
+	padding: 1rem;
+	gap: 1rem;
+}
+.rr-release-flow li {
+	border-top: 3px solid var(--rr-line);
+	padding-top: 0.7rem;
+	list-style: none;
+}
+.rr-release-flow li.done {
+	border-color: var(--rr-green);
+}
+.rr-release-flow span {
+	display: block;
+	font-size: 0.9rem;
+	color: var(--rr-muted);
+	margin-top: 0.3rem;
+}
+.rr-workspace .pf-v6-c-tabs {
+	margin-bottom: 1.5rem;
+}
+.rr-workspace .pf-v6-c-card {
+	box-shadow: none;
+}
+.rr-validation-table {
+	overflow: auto;
+	margin-block: 1rem;
+}
+.rr-validation-table table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.rr-validation-table th,
+.rr-validation-table td {
+	padding: 0.8rem;
+	border-bottom: 1px solid var(--rr-line);
+	text-align: left;
+	vertical-align: top;
+}
+.rr-validation-table th {
+	font-weight: 600;
+}
+.rr-validation-table td:first-child {
+	min-width: 12rem;
+}
+.rr-record {
+	margin-block: 1rem;
+	padding: 1.25rem;
+	background: var(--rr-panel);
+	border: 1px solid var(--rr-line);
+	border-radius: 8px;
+}
+.rr-record h2 {
+	font-size: 1.3rem;
+	margin-bottom: 1rem;
+}
+.rr-record code {
+	overflow-wrap: anywhere;
+}
+.rr-version-nav {
+	display: flex;
+	gap: 1rem;
+	align-items: end;
+	justify-content: space-between;
+	flex-wrap: wrap;
+}
+.rr-version-nav label {
+	display: grid;
+	gap: 0.4rem;
+}
+@media (max-width: 1100px) {
+	.rr-card-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.rr-stage-grid {
+		gap: 0.8rem;
+	}
+	.rr-release-card {
+		padding: 1rem;
+	}
+}
+@media (max-width: 850px) {
+	.rr-stage-grid {
+		grid-template-columns: 1fr;
+	}
+	.rr-stage-heading {
+		min-height: auto;
+		margin-bottom: 1rem;
+	}
+	.rr-decision {
+		grid-template-columns: 1fr;
+	}
+	.rr-decision-coverage {
+		border-left: 0;
+		padding: 1rem 0 0;
+		border-top: 1px solid var(--rr-line);
+	}
+	.rr-release-flow {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.rr-portfolio-summary {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@media (max-width: 600px) {
+	.rr-card-grid {
+		grid-template-columns: 1fr;
+	}
+	.rr-page.pf-v6-c-page__main-section {
+		padding: 1rem;
+	}
+	.rr-decision {
+		padding: 1.2rem;
+	}
+	.rr-brand-subtitle {
+		font-size: 0.75rem;
+	}
+	.pf-v6-c-page > .pf-v6-c-masthead {
+		--pf-v6-c-masthead--m-display-inline--GridTemplateColumns: 1fr;
+	}
+}
