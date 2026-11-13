@@ -129,3 +129,11 @@ cd web && npm run dev
 ### Upgrading
 
 The schema changed when the Konflux source moved to Kubernetes. Delete the old SQLite database file before upgrading; it is recreated on startup.
+
+## v2 portfolio and validation
+
+The `v2.0` UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
+
+`GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. Load the reviewed JSON with `-validation-plan` (`VALIDATION_PLAN`). `config/quay-validation-plan.json` is the captured generator-derived plan, with its source revision and configuration links. Review/reconcile job names when updating it; new streams without a plan remain unknown. No run status is embedded in the plan.
+
+Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources, and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The new projection is advisory and does not execute a shipment or write to JIRA.

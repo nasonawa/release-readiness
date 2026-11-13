@@ -18,6 +18,7 @@ import (
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	// The JIRA sync is tracked only when the server was started with a token.
 	writeJSON(w, http.StatusOK, map[string]any{
+		"app_version":       "2.0.0-dev",
 		"jira_base_url":     s.jiraBaseURL,
 		"jira_project":      s.jiraProject,
 		"jira_enabled":      s.syncStatus.Tracks("jira"),
@@ -156,6 +157,7 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 			Readiness:    computeReadiness(&rel, latest != nil, catalogShipped, time.Now()),
 			LatestBuild:  latest,
 			Shipped:      catalogShipped || rel.Released,
+			Published:    catalogShipped,
 			ShipmentMR:   mrs[rel.Name],
 		}
 		if !shippedAt.IsZero() {
@@ -163,6 +165,26 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	markNextInStream(overviews)
+	if r.URL.Query().Get("portfolio") == "1" {
+		for i := range overviews {
+			ov := &overviews[i]
+			facts := &model.PortfolioFacts{Stage: "validation"}
+			ov.Portfolio = facts
+			candidate, runs, err := s.selector.ReleaseCandidate(ctx, &ov.Release)
+			if err != nil {
+				facts.Error = "Candidate evidence unavailable"
+				continue
+			}
+			facts.Verdict = candidate.Verdict
+			facts.Validation = s.validation(ov.Release.KonfluxApplication, candidate, runs)
+			facts.Validation.Rows = nil
+			if ov.Published {
+				facts.Stage = "available"
+			} else if facts.Validation.Ready {
+				facts.Stage = "shipment"
+			}
+		}
+	}
 
 	writeJSON(w, http.StatusOK, overviews)
 }
