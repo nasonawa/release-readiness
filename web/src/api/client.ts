@@ -7,6 +7,7 @@ import type {
 	ReleaseDetail,
 	ReleaseOverview,
 	SyncStatus,
+	Validation,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -30,7 +31,7 @@ export function getSyncStatus(): Promise<SyncStatus> {
 // --- Release-centric API ---
 
 export function listReleasesOverview(): Promise<ReleaseOverview[]> {
-	return fetchJSON(`${BASE}/releases/overview`);
+	return fetchJSON(`${BASE}/releases/overview?portfolio=1`);
 }
 
 export function getRelease(version: string): Promise<ReleaseDetail> {
@@ -47,6 +48,12 @@ export function getCandidate(version: string): Promise<ReleaseCandidate> {
 
 export function getFBCTags(version: string): Promise<FBCTags> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/fbc-tags`);
+}
+
+export function getValidation(version: string): Promise<Validation> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/validation`,
+	);
 }
 
 export function getReleaseCI(version: string): Promise<FBCBuild[]> {
