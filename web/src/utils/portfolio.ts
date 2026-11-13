@@ -54,7 +54,7 @@ export function groupStreams(releases: ReleaseOverview[]) {
 		);
 }
 export function stageReleases(releases: ReleaseOverview[], history: boolean) {
-	if (history) return releases;
+	if (history) return groupStreams(releases).flatMap((g) => g.releases);
 	return groupStreams(releases).flatMap((g) =>
 		g.releases.filter(
 			(r) =>

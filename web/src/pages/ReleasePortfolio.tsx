@@ -178,7 +178,16 @@ export default function ReleasePortfolio() {
 				{!ov.published && (
 					<p className="rr-muted">
 						Target:{" "}
-						{ov.release.due_date || ov.release.release_date || "Not scheduled"}
+						{ov.release.due_date || ov.release.release_date
+							? new Date(
+									ov.release.due_date || ov.release.release_date!,
+								).toLocaleDateString(undefined, {
+									year: "numeric",
+									month: "short",
+									day: "numeric",
+									timeZone: "UTC",
+								})
+							: "Not scheduled"}
 					</p>
 				)}
 				<Link className="rr-card-action" to={path(ov)}>
@@ -188,7 +197,7 @@ export default function ReleasePortfolio() {
 			</>
 		);
 	}
-	if (!data)
+	if (!data || error)
 		return (
 			<PageSection>
 				{error ? (
