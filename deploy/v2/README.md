@@ -2,6 +2,8 @@
 
 Image: `quay.io/nasonawa/release-readness:v2.0` (Linux amd64).
 
+The manifest pins the verified v2.0 digest `sha256:2be9cb2f4acf779ae07e8f71be972130b2d0a936c669cce74d6bac2a4f00c330`. GitLab shipment ingestion is currently disabled with `-gitlab-url ""`; remove that argument pair when enabling GitLab. GitHub credentials remain optional.
+
 Run from the repository root. These are operator-run commands: preparing this guide does not create Secrets, deploy workloads, or change routes. The reviewed target project is `nasonawa`; it currently runs the static `quay-readiness-proto2` application. This manifest creates `release-readiness` with the backend and persistent database. An image-only update of the static prototype does not supply its required configuration.
 
 ## Secrets: commands to run yourself
@@ -105,7 +107,7 @@ oc -n nasonawa rollout restart deployment/release-readiness
 oc -n nasonawa rollout status deployment/release-readiness --timeout=300s
 ```
 
-Prefer pinning a verified `quay.io/nasonawa/release-readness@sha256:...` digest for reproducible updates. Changing a digest triggers a rollout without a separate restart. Reapplying `app.yaml` restores its tag unless you update that file too. Record the previous digest before changing it; rollback to that digest rather than trusting a reused tag. Back up the PVC before upgrades that migrate data.
+Prefer pinning a verified `quay.io/nasonawa/release-readness@sha256:...` digest for reproducible updates. Changing a digest triggers a rollout without a separate restart. Reapplying `app.yaml` restores its pinned digest unless you update that file too. Record the previous digest before changing it; rollback to that digest rather than trusting a reused tag. Back up the PVC before upgrades that migrate data.
 
 After changing the validation ConfigMap or a Secret, restart the deployment: the plan and environment credentials are loaded at startup, and the Kubernetes client also needs to reload rotated credentials. `PROW_JOB_PATTERN` includes operator, legacy, upgrade, and standalone periodics; the validation plan itself does not enable ingestion. The checked-in plan is a revisioned snapshot; standalone identity matching and an OMR plan remain follow-up work.
 

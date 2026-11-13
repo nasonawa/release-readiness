@@ -42,9 +42,10 @@ spec:
       serviceAccountName: release-readiness
       containers:
         - name: dashboard
-          image: quay.io/nasonawa/release-readness:v2.0
+          image: quay.io/nasonawa/release-readness:v2.0@sha256:2be9cb2f4acf779ae07e8f71be972130b2d0a936c669cce74d6bac2a4f00c330
           imagePullPolicy: Always
-          args: ["-addr", ":8080", "-db", "/data/release-readiness.db"]
+          # Shipment MR ingestion is off until GitLab is configured.
+          args: ["-addr", ":8080", "-db", "/data/release-readiness.db", "-gitlab-url", ""]
           envFrom:
             - secretRef:
                 name: release-readiness-jira
