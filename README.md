@@ -206,6 +206,7 @@ release-readiness -prow-job-discovery \
 | `-ci-workers` | 4 | Concurrent GCS evidence fetches |
 | `-jira-workers` | 2 | Concurrent release issue fetches with shared request pacing |
 | `-art-workers` | 2 | Concurrent ART component resolutions |
+| `-ci-stream-budget` | 2m | Maximum duration per Sippy stream or live GCS job; foreground starting stream rotates |
 | `-ci-candidate-lookback` | 24h | Look back before an active release's earliest known ART FBC build start |
 | `-prow-live-refresh-interval` | 2m | Foreground GCS discovery for pending/triggered runs Sippy may omit; 0 disables |
 | `-prow-history-interval` | 1h | One historical-only stream per interval, after successful foreground work; 0 disables |
