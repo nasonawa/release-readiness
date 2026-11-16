@@ -179,9 +179,11 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 		if err := json.Unmarshal(finData, &fin); err != nil {
 			return nil, "", fmt.Errorf("parse finished.json: %w", err)
 		}
-		if fin.Result != "" {
-			r.State = strings.ToLower(fin.Result)
+		fin.Result = strings.ToLower(strings.TrimSpace(fin.Result))
+		if fin.Timestamp <= 0 || !slices.Contains([]string{"success", "failure", "error", "aborted"}, fin.Result) {
+			return nil, "", fmt.Errorf("invalid completion record")
 		}
+		r.State = fin.Result
 		t := time.Unix(fin.Timestamp, 0).UTC()
 		r.CompletedAt = &t
 	}

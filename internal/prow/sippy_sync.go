@@ -34,6 +34,7 @@ type SippySync struct {
 	WindowStart         func(context.Context, string) (time.Time, error)
 	Status              *syncstatus.Source
 	Workers             int
+	StreamBudget        time.Duration
 	Retention, Lookback time.Duration
 	// LegacyInterval refreshes running/triggered jobs missing from Sippy.
 	// Zero disables this additional GCS discovery. It is independently paced.
@@ -45,6 +46,7 @@ type SippySync struct {
 	HistoryStatus                  *syncstatus.Source
 	lastHistory                    time.Time
 	historyCursor                  int
+	foregroundCursor               int
 	idle                           bool
 	now                            func() time.Time
 }
@@ -107,18 +109,21 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 		windowFn = s.Store.CandidateWindowStart
 	}
 	windows := map[string]time.Time{}
+	var pass syncstatus.Pass
 	var active, unknown, historical []string
 	for app := range groups {
 		start, err := windowFn(ctx, app)
 		if err != nil {
-			return err
+			pass.Add(fmt.Errorf("candidate window %s: %w", app, err))
+			continue
 		}
 		if start.IsZero() {
 			slog.Info("Prow lookup deferred", "application", app, "reason", "no release with a dated FBC")
 			continue
 		}
 		if start.After(s.clock()) {
-			return fmt.Errorf("FBC build start for %s is in the future", app)
+			pass.Add(fmt.Errorf("FBC build start for %s is in the future", app))
+			continue
 		}
 		windows[app] = start
 		if isActive, known := activity[app]; !known {
@@ -133,9 +138,13 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 	sort.Strings(historical)
 	sort.Strings(unknown)
 	active = append(active, unknown...)
+	if len(active) > 0 {
+		offset := s.foregroundCursor % len(active)
+		s.foregroundCursor++
+		active = append(active[offset:], active[:offset]...)
+	}
 	s.idle = len(active) == 0
 	slog.Info("Prow scheduling", "foreground", active, "historical", historical)
-	var pass syncstatus.Pass
 	for _, app := range active {
 		if ctx.Err() != nil {
 			return errors.Join(pass.Err(), ctx.Err())
@@ -150,6 +159,8 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 		started := time.Now()
 		fetched := 0
 		pass.Add(workpool.Run(ctx, liveJobs, s.Workers, func(ctx context.Context, d JobDefinition) (int, error) {
+			ctx, cancel := context.WithTimeout(ctx, s.streamBudget())
+			defer cancel()
 			return s.Artifacts.syncJobWindow(ctx, d.Job(), maxWindowStart(s.clock(), s.Retention, windows[d.Application], s.Lookback), s.clock())
 		}, func(_ JobDefinition, n int) error { fetched += n; return nil }))
 		slog.Info("Prow live discovery", "jobs", len(liveJobs), "fetched", fetched, "duration_ms", time.Since(started).Milliseconds())
@@ -183,6 +194,8 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 }
 
 func (s *SippySync) syncStream(ctx context.Context, app string, definitions []JobDefinition, start time.Time) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, s.streamBudget())
+	defer cancel()
 	started := time.Now()
 	metrics := &requestMetrics{}
 	ctx = context.WithValue(ctx, requestMetricsKey{}, metrics)
@@ -306,4 +319,11 @@ func maxWindowStart(now time.Time, retention time.Duration, start time.Time, loo
 		from = candidateFrom
 	}
 	return from
+}
+
+func (s *SippySync) streamBudget() time.Duration {
+	if s.StreamBudget > 0 {
+		return s.StreamBudget
+	}
+	return 2 * time.Minute
 }

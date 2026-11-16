@@ -146,6 +146,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		s.logger.Error("discover jobs", "error", err)
 		pass.Add(fmt.Errorf("discover jobs: %w", err))
 	}
+	lookups := 0
 	for _, job := range jobs {
 		var n int
 		var err error
@@ -166,6 +167,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 				}
 			}
 		}
+		lookups++
 		if err != nil {
 			s.logger.Error("sync job", "job", job.Name, "error", err)
 			pass.Add(fmt.Errorf("%s: %w", job.Name, err))
@@ -173,7 +175,11 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		}
 		s.logger.Info("synced job", "job", job.Name, "fetched", n)
 	}
-	s.Status.Report(pass.Err())
+	if lookups == 0 && pass.Err() == nil && s.WindowStart != nil {
+		s.Status.Idle("No release with a dated FBC and configured jobs")
+	} else {
+		s.Status.Report(pass.Err())
+	}
 }
 
 // discover returns the configured jobs and those Pattern matches in the
@@ -338,17 +344,22 @@ func (s *Syncer) fetchRunWindow(ctx context.Context, job Job, id string, from, u
 	if err != nil || pjData == nil {
 		return nil, err
 	}
+	run, target, err := parseRun(job, id, pjData, nil)
+	if err != nil {
+		return nil, err
+	}
+	if !from.IsZero() && (run.StartedAt == nil || run.StartedAt.Before(from)) || !until.IsZero() && (run.StartedAt == nil || run.StartedAt.After(until)) {
+		return run, nil
+	}
 	finData, err := s.client.object(ctx, dir+"finished.json")
 	if err != nil {
 		return nil, err
 	}
-	run, target, err := parseRun(job, id, pjData, finData)
-	if err != nil {
-		s.logger.Warn("skip run", "job", job.Name, "build_id", id, "error", err)
-		return nil, nil
-	}
-	if !from.IsZero() && (run.StartedAt == nil || run.StartedAt.Before(from)) || !until.IsZero() && (run.StartedAt == nil || run.StartedAt.After(until)) {
-		return run, nil
+	if finData != nil {
+		run, target, err = parseRun(job, id, pjData, finData)
+		if err != nil {
+			return nil, err
+		}
 	}
 	run.FetchedAt = time.Now().UTC()
 	run.ArtifactState = ArtifactNone

@@ -440,3 +440,74 @@ func TestLegacyModeWaitsForCandidate(t *testing.T) {
 		t.Fatalf("direct GCS bypassed candidate scheduling: %v", counts)
 	}
 }
+
+func TestSlowStreamDoesNotStarveAnotherCandidate(t *testing.T) {
+	jobs := experimentInventory(t)
+	s, a, m := productionSippy(t, jobs)
+	s.StreamBudget = 20 * time.Millisecond
+	s.WindowStart = func(_ context.Context, app string) (time.Time, error) {
+		if app == "quay-3-18" || app == "quay-5-0" {
+			return m.start, nil
+		}
+		return time.Time{}, nil
+	}
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("release") == "quay-3.18" {
+			<-r.Context().Done()
+			return
+		}
+		a.server.Config.Handler.ServeHTTP(w, r)
+	}))
+	defer slow.Close()
+	s.Client = NewSippyClient(slow.URL)
+	if err := s.SyncOnce(t.Context()); err == nil {
+		t.Fatal("slow stream error hidden")
+	}
+	if !slices.Contains(a.releases, "quay-5.0") {
+		t.Fatalf("healthy stream starved: %v", a.releases)
+	}
+}
+
+func TestBadCandidateDateDoesNotBlockOtherStreams(t *testing.T) {
+	s, a, m := productionSippy(t, experimentInventory(t))
+	s.WindowStart = func(_ context.Context, app string) (time.Time, error) {
+		if app == "quay-3-18" {
+			return s.clock().Add(time.Hour), nil
+		}
+		if app == "quay-5-0" {
+			return m.start, nil
+		}
+		return time.Time{}, nil
+	}
+	if err := s.SyncOnce(t.Context()); err == nil {
+		t.Fatal("future date accepted")
+	}
+	if !slices.Equal(a.releases, []string{"quay-5.0"}) {
+		t.Fatalf("healthy candidate not queried: %v", a.releases)
+	}
+}
+
+func TestForegroundRotation(t *testing.T) {
+	s, a, _ := productionSippy(t, experimentInventory(t))
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	first := slices.Clone(a.releases)
+	a.releases = nil
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.releases) != len(first) || a.releases[0] != first[1] {
+		t.Fatalf("foreground did not rotate: %v -> %v", first, a.releases)
+	}
+}
+
+func TestDirectGCSRejectsInvalidCompletion(t *testing.T) {
+	jobs := experimentInventory(t)[:1]
+	s, a, _ := productionSippy(t, jobs)
+	row := a.rows[jobs[0].Release][0]
+	a.objects[jobs[0].prowJob().Prefix+row.ID+"/finished.json"] = []byte(`{"result":"SUCCESS","timestamp":0}`)
+	if run, err := s.Artifacts.fetchRun(t.Context(), jobs[0].prowJob(), row.ID); err == nil || run != nil {
+		t.Fatal("invalid completion accepted")
+	}
+}

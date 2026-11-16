@@ -96,6 +96,7 @@ func main() {
 	jobDiscovery := flag.Bool("prow-job-discovery", os.Getenv("PROW_JOB_DISCOVERY") == "true", "import required release periodics from openshift/release")
 	inventoryInterval := flag.Duration("prow-inventory-interval", 10*time.Minute, "periodic configuration refresh interval")
 	sippyURL := flag.String("sippy-url", os.Getenv("SIPPY_URL"), "Sippy API base URL; empty uses legacy GCS ingestion")
+	ciStreamBudget := flag.Duration("ci-stream-budget", 2*time.Minute, "time budget per Sippy stream or live GCS job")
 	ciWorkers := flag.Int("ci-workers", 4, "maximum concurrent CI artifact fetches")
 	jiraWorkers := flag.Int("jira-workers", 2, "maximum concurrent JIRA release issue fetches")
 	artWorkers := flag.Int("art-workers", 2, "maximum concurrent ART component resolutions")
@@ -116,7 +117,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 || *historyInterval < 0 || *historyBudget <= 0 || *artCurrentBudget <= 0 || *artHistoryBudget <= 0 || *artHistoryInterval < 0 {
+	if *ciStreamBudget <= 0 || *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 || *historyInterval < 0 || *historyBudget <= 0 || *artCurrentBudget <= 0 || *artHistoryBudget <= 0 || *artHistoryInterval < 0 {
 		logger.Error("invalid sync interval or lookback")
 		os.Exit(1)
 	}
@@ -309,7 +310,7 @@ func main() {
 			syncer.Inventory = database
 		}
 		if *sippyURL != "" {
-			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Activity: selector.IngestionActivity, WindowStart: selector.CIWindowStart, Status: syncer.Status, Workers: *ciWorkers, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval, HistoryInterval: *historyInterval, HistoryBudget: *historyBudget}
+			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Activity: selector.IngestionActivity, WindowStart: selector.CIWindowStart, Status: syncer.Status, Workers: *ciWorkers, StreamBudget: *ciStreamBudget, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval, HistoryInterval: *historyInterval, HistoryBudget: *historyBudget}
 			if *historyInterval > 0 {
 				indexed.HistoryStatus = status.Track("prow-history", 0)
 			}
