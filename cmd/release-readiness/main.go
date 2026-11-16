@@ -91,10 +91,32 @@ func main() {
 	jiraWriteToken := flag.String("jira-write-token", os.Getenv("JIRA_WRITE_TOKEN"), "JIRA Cloud API token of the write credential, never the -jira-token one")
 
 	validationPlanPath := flag.String("validation-plan", os.Getenv("VALIDATION_PLAN"), "reviewed required Prow job plan JSON; empty leaves full-matrix readiness unknown")
+	jobDiscovery := flag.Bool("prow-job-discovery", os.Getenv("PROW_JOB_DISCOVERY") == "true", "import required release periodics from openshift/release")
+	inventoryInterval := flag.Duration("prow-inventory-interval", 10*time.Minute, "periodic configuration refresh interval")
+	sippyURL := flag.String("sippy-url", os.Getenv("SIPPY_URL"), "Sippy API base URL; empty uses legacy GCS ingestion")
+	ciWorkers := flag.Int("ci-workers", 4, "maximum concurrent CI artifact fetches")
+	jiraWorkers := flag.Int("jira-workers", 2, "maximum concurrent JIRA release issue fetches")
+	artWorkers := flag.Int("art-workers", 2, "maximum concurrent ART component resolutions")
+	ciLookback := flag.Duration("ci-candidate-lookback", 24*time.Hour, "lookback before an ART FBC build for CI runs that started earlier")
+	legacyInterval := flag.Duration("prow-live-refresh-interval", time.Hour, "GCS discovery interval for queued/running jobs absent from Sippy; 0 disables")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
+	for _, n := range []int{*ciWorkers, *jiraWorkers, *artWorkers} {
+		if n < 1 || n > 64 {
+			logger.Error("worker counts must be between 1 and 64")
+			os.Exit(1)
+		}
+	}
+	if *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 {
+		logger.Error("invalid sync interval or lookback")
+		os.Exit(1)
+	}
+	if *sippyURL != "" && !*jobDiscovery {
+		logger.Error("-sippy-url requires -prow-job-discovery")
+		os.Exit(1)
+	}
 
 	validationPlans, err := release.LoadValidationPlans(*validationPlanPath)
 	if err != nil {
@@ -143,6 +165,19 @@ func main() {
 		}
 	})
 
+	var inventoryPlans *release.PlanRegistry
+	if *jobDiscovery {
+		inventoryPlans = release.NewPlanRegistry(validationPlans)
+		definitions, revision, err := database.JobInventory(ctx)
+		if err != nil {
+			logger.Error("load periodic inventory", "error", err)
+			os.Exit(1)
+		}
+		inventoryPlans.Update(definitions, revision)
+		discovery := &prow.InventorySync{Client: prow.NewInventoryClient(*githubToken), Store: database, Status: status.Track("prow-inventory", *inventoryInterval), Updated: inventoryPlans.Update}
+		wg.Go(func() { discovery.Run(ctx, *inventoryInterval) })
+	}
+
 	kubeCfg, err := kube.RESTConfig(*kubeconfig)
 	var kc *dynamic.DynamicClient
 	if err == nil {
@@ -178,6 +213,7 @@ func main() {
 			})
 		}
 		syncer := jira.NewSyncer(jiraClient, database, jiraTx, jiraLog)
+		syncer.Workers = *jiraWorkers
 		syncer.Status = status.Track("jira", *jiraPollInterval)
 		wg.Go(func() { syncer.Run(ctx, *jiraPollInterval) })
 	}
@@ -187,7 +223,9 @@ func main() {
 		artLog := logger.With("component", "art-resolve")
 		logger.Info("art build history enabled", "url", *artURL)
 		art = artbuild.NewClient(*artURL, &http.Client{Timeout: time.Minute})
+		art.MinRequestInterval = time.Second
 		resolver := artbuild.NewResolver(art, database, artLog)
+		resolver.Workers = *artWorkers
 		resolver.Status = status.Track("art-builds", 5*time.Minute)
 		wg.Go(func() { resolver.Run(ctx, 5*time.Minute) })
 		history := artbuild.NewHistorySync(art, database, logger.With("component", "art-history"))
@@ -230,13 +268,21 @@ func main() {
 		wg.Go(func() { shipped.Run(ctx, time.Hour) })
 	}
 
-	if len(prowJobList) > 0 || prowPattern != nil {
+	if len(prowJobList) > 0 || prowPattern != nil || *jobDiscovery {
 		logger.Info("prow sync enabled", "jobs", len(prowJobList), "pattern", *prowJobPattern, "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)
 		syncer.Retention = *retention
 		syncer.Pattern = prowPattern
-		wg.Go(func() { syncer.Run(ctx) })
+		if *jobDiscovery {
+			syncer.Inventory = database
+		}
+		if *sippyURL != "" {
+			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Status: syncer.Status, Workers: *ciWorkers, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval}
+			wg.Go(func() { indexed.Run(ctx, *prowInterval) })
+		} else {
+			wg.Go(func() { syncer.Run(ctx) })
+		}
 	}
 
 	if *retention > 0 {
@@ -267,6 +313,7 @@ func main() {
 	selector.StageReleasePlanPattern = stagePlans
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, selector, status, logger)
 	srv.ValidationPlans = validationPlans
+	srv.InventoryPlans = inventoryPlans
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
 

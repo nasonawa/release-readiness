@@ -34,16 +34,26 @@ type InventoryStore interface {
 }
 
 type InventoryClient struct {
-	BaseURL, Token string
-	HTTP           *http.Client
+	BaseURL, RawBaseURL, Token string
+	HTTP                       *http.Client
 }
 
 func NewInventoryClient(token string) *InventoryClient {
-	return &InventoryClient{BaseURL: "https://api.github.com", Token: token, HTTP: &http.Client{Timeout: 30 * time.Second}}
+	return &InventoryClient{BaseURL: "https://api.github.com", RawBaseURL: "https://raw.githubusercontent.com/openshift/release", Token: token, HTTP: &http.Client{Timeout: 30 * time.Second}}
 }
 
 func (c *InventoryClient) get(ctx context.Context, p string, raw bool) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.BaseURL, "/")+"/repos/openshift/release/"+p, nil)
+	address := strings.TrimRight(c.BaseURL, "/") + "/repos/openshift/release/" + p
+	publicRaw := raw && c.RawBaseURL != ""
+	if publicRaw {
+		file, query, _ := strings.Cut(p, "?")
+		values, err := url.ParseQuery(query)
+		if err != nil {
+			return nil, err
+		}
+		address = strings.TrimRight(c.RawBaseURL, "/") + "/" + values.Get("ref") + "/" + strings.TrimPrefix(file, "contents/")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +61,7 @@ func (c *InventoryClient) get(ctx context.Context, p string, raw bool) ([]byte, 
 	if raw {
 		req.Header.Set("Accept", "application/vnd.github.raw+json")
 	}
-	if c.Token != "" {
+	if c.Token != "" && !publicRaw {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	resp, err := c.HTTP.Do(req)

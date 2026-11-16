@@ -136,9 +136,9 @@ For the v2.0 image, OpenShift manifests, operator-run Secret commands, and image
 
 The `v2.0` UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
 
-`GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. Load the reviewed JSON with `-validation-plan` (`VALIDATION_PLAN`). `config/quay-validation-plan.json` is the captured generator-derived plan, with its source revision and configuration links. Review/reconcile job names when updating it; new streams without a plan remain unknown. No run status is embedded in the plan.
+`GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. With `-prow-job-discovery` (`PROW_JOB_DISCOVERY=true`), the app imports release periodics from both `ci-operator/jobs/quay/quay` and `ci-operator/jobs/quay/quay-operator`, pinned to one openshift/release commit. The complete inventory is stored in SQLite and published atomically. Jobs with no runs remain required. Removed jobs remain missing requirements pending review; failed or partial imports preserve the last good inventory. The optional `-validation-plan` (`VALIDATION_PLAN`) JSON remains a bootstrap/explicit future-requirement overlay. Its jobs are never silently dropped; an overlay job absent from a successfully imported inventory remains unconfigured/missing. No run status is embedded in either plan.
 
-Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources, and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The new projection is advisory and does not execute a shipment or write to JIRA.
+Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources (plus periodic inventory when enabled), and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The new projection is advisory and does not execute a shipment or write to JIRA.
 
 The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.z`, latest available release, and expandable z-stream records. Stages display concrete `x.y.z` releases; **Show history** adds older records. Opening either goes to the same exact-release workspace: release briefing, validation workbench, and searchable JIRA issues. Links preserve the portfolio layout, product, and history selection. Motion respects the system reduced-motion preference.
 
@@ -184,3 +184,40 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:8089 \
 ```
 
 These tests intercept API responses inside the test browser for deterministic edge cases; the running app uses the real API. With no `PLAYWRIGHT_BASE_URL`, Playwright starts the Vite development server as before.
+
+
+## Background ingestion: dynamic jobs and Sippy
+
+`compose.yaml` enables dynamic job discovery and Sippy-assisted ingestion, polls CI every two minutes, and keeps JIRA writing disabled. The binary remains opt-in for these integrations for compatibility with existing deployments:
+
+```sh
+release-readiness -prow-job-discovery \
+  -sippy-url https://sippy.dptools.openshift.org \
+  -validation-plan config/quay-validation-plan.json \
+  -prow-interval 2m
+```
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `-prow-job-discovery` / `PROW_JOB_DISCOVERY` | false in binary; true in Compose | Persist required periodic definitions from GitHub |
+| `-prow-inventory-interval` | 10m | Check the pinned config revision; unchanged revisions skip file downloads |
+| `-sippy-url` / `SIPPY_URL` | empty in binary | Sippy API base; requires discovery enabled |
+| `-ci-workers` | 4 | Concurrent GCS evidence fetches |
+| `-jira-workers` | 2 | Concurrent release issue fetches with shared request pacing |
+| `-art-workers` | 2 | Concurrent ART component resolutions |
+| `-ci-candidate-lookback` | 24h | Look back before an active release's earliest known ART FBC build start |
+| `-prow-live-refresh-interval` | 1h | Additional GCS discovery for pending/triggered runs Sippy may omit; 0 disables |
+
+Sippy supplies release-scoped paginated run indexes. The search starts around the earliest dated FBC of active releases in the stream, with the configured lookback and retention boundary. An active release without a dated FBC broadens the search to retention. The adapter re-reads that bounded window to accommodate late indexing; it does not advance a timestamp-only cursor that could skip late runs. A maximum of 200 pages of 100 runs per stream fails explicitly if exceeded. Sippy's recent history is capped at 90 days even when app retention is disabled; already stored evidence remains governed by app retention. ART timestamps are build start times, not claimed publication timestamps, so they provide a conservative search boundary.
+
+For indexed runs, `tested-images.json` still establishes catalog/bundle/component identity; `finished.json` supplies authoritative terminal result and completion time. A run inside the time window is not proof that it tested the candidate. Unknown/changed targets use `prowjob.json` fallback; older CSV evidence remains supported but cannot establish an exact catalog match. Missing artifacts are retried rather than permanently cached. Complete exact-identity evidence is cached in SQLite across restarts. Artifact writes use transactions of at most 20 runs; network fetches occur outside those transactions.
+
+The normal Sippy path avoids GCS directory listings. The separately paced legacy refresh starts after its interval and preserves queued/running visibility at that cadence; it still lists GCS directories and uses the existing retention logic. Sippy failures leave stored evidence intact and report the `prow` source as unhealthy. They do not silently fall back to a green result. Source errors and freshness appear in `/api/v1/sync-status`.
+
+Worker queues are bounded and cancellation-aware, with serial persistence within each source batch. ART resolver/history/scan calls share a one-request-per-second client limit; existing ART history backfill remains interleaved and serial. JIRA keeps full per-version issue reconciliation and existing 429 retry behavior. No page or partial JIRA response is treated as a complete issue scope.
+
+The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. Static requirements are still useful for matrix combinations that do not have a periodic definition yet. In discovery mode the imported inventory selects jobs; `PROW_JOB_PATTERN` is only used by legacy name discovery when dynamic discovery is off.
+
+For local startup, run `podman compose up --build` (or Docker Compose). To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. To return to entirely legacy configuration, also set `RR_PROW_JOB_DISCOVERY=false` and supply `PROW_JOBS` or `PROW_JOB_PATTERN`. No OCP deployment is needed for these changes.
+
+Verification uses only loopback API mocks: `go test -race ./internal/prow ./internal/db ./internal/release ./internal/server ./internal/jira ./internal/artbuild ./internal/workpool`. The earlier request-count experiment now shares production artifact enrichment; the production integration tests cover batching, persistent caches, late artifacts, pagination failures, candidate windows and inventory freshness. Deployed Sippy contract/stream coverage has not been checked with live statuses.
