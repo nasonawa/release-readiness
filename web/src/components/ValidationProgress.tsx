@@ -5,7 +5,13 @@ export default function ValidationProgress({ data }: { data?: Validation }) {
 		return (
 			<div className="rr-validation-progress">
 				<div className="rr-progress-track" />
-				<p className="rr-muted">Required validation plan not configured</p>
+				<p className="rr-muted">CI configuration unavailable</p>
+			</div>
+		);
+	if (data.total === 0)
+		return (
+			<div className="rr-validation-progress">
+				<p className="rr-muted">No CI configured</p>
 			</div>
 		);
 	const values = [

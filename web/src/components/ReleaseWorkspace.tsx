@@ -328,13 +328,16 @@ function ValidationWorkbench({
 	if (!data) return <Loading title="Loading validation…" />;
 	if (!data.plan_known)
 		return (
-			<Alert
-				isInline
-				variant="info"
-				title="Required validation plan not configured"
-			>
-				FBCs and observed CI remain available below. Observed passing jobs do
-				not establish full-matrix readiness.
+			<Alert isInline variant="info" title="CI configuration unavailable">
+				The job inventory has not been loaded. Readiness cannot be determined
+				yet.
+			</Alert>
+		);
+	if (data.total === 0)
+		return (
+			<Alert isInline variant="info" title="No CI configured">
+				No periodic jobs are configured for this version in the latest imported
+				job inventory. CI readiness cannot be established.
 			</Alert>
 		);
 	const rows = (data.rows || []).filter(

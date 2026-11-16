@@ -409,3 +409,11 @@ body {
 		overflow-wrap: anywhere;
 	}
 }
+
+/* The header popover must fit below its trigger, including long source errors. */
+.rr-source-popover .pf-v6-c-popover__content {
+	max-height: calc(100dvh - 10rem);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	overflow-wrap: anywhere;
+}
