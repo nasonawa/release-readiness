@@ -3,9 +3,31 @@ package server
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/prow"
+	"github.com/quay/release-readiness/internal/release"
 )
+
+func TestDynamicInventoryFreshnessAndZeroRunCoverage(t *testing.T) {
+	s := setupTestServer(t)
+	s.InventoryPlans = release.NewPlanRegistry(nil)
+	s.InventoryPlans.Update([]prow.JobDefinition{{Name: "new-job", Application: "quay-3-18"}}, "rev")
+	for _, name := range []string{"prow", "konflux", "art-history", "fbc-render"} {
+		s.syncStatus.Track(name, time.Minute).Report(nil)
+	}
+	c := &model.ReleaseCandidate{Verdict: model.Verdict{State: "ready"}}
+	v := s.validation("quay-3-18", c, nil)
+	if v.SourceFresh || v.Total != 1 || v.Missing != 1 || v.Ready {
+		t.Fatalf("unrefreshed inventory: %+v", v)
+	}
+	s.syncStatus.Track("prow-inventory", time.Minute).Report(nil)
+	v = s.validation("quay-3-18", c, nil)
+	if !v.SourceFresh || v.Total != 1 || v.Missing != 1 || v.Ready {
+		t.Fatalf("new job without runs: %+v", v)
+	}
+}
 
 func TestMissingValidationRelease(t *testing.T) {
 	var response map[string]any

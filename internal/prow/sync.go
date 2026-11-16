@@ -84,7 +84,11 @@ func (c *Client) get(ctx context.Context, u string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: %s", u, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	b, err := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
+	if len(b) > 16<<20 {
+		return nil, fmt.Errorf("GCS response too large")
+	}
+	return b, err
 }
 
 // Store is the subset of the database layer the syncer needs.
@@ -107,7 +111,8 @@ type Syncer struct {
 	Retention time.Duration
 	// Pattern, when set, adds the jobs it matches to jobs each pass; a job
 	// in jobs keeps its application.
-	Pattern *JobPattern
+	Pattern   *JobPattern
+	Inventory InventoryStore
 }
 
 func NewSyncer(client *Client, store Store, jobs []Job, interval time.Duration, logger *slog.Logger) *Syncer {
@@ -152,6 +157,23 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 // discover returns the configured jobs and those Pattern matches in the
 // bucket. On a listing failure it returns the configured jobs.
 func (s *Syncer) discover(ctx context.Context) ([]Job, error) {
+	if s.Inventory != nil {
+		definitions, revision, err := s.Inventory.JobInventory(ctx)
+		if err != nil {
+			return s.jobs, err
+		}
+		if revision == "" {
+			return s.jobs, fmt.Errorf("awaiting complete periodic inventory")
+		}
+		jobs := slices.Clone(s.jobs)
+		for _, d := range definitions {
+			if !d.Removed && !slices.ContainsFunc(jobs, func(j Job) bool { return j.Name == d.Name }) {
+				jobs = append(jobs, d.Job())
+			}
+		}
+		return jobs, nil
+	}
+
 	if s.Pattern == nil {
 		return s.jobs, nil
 	}
