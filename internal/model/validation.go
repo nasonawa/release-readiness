@@ -15,6 +15,7 @@ type Validation struct {
 }
 
 type ValidationRow struct {
+	DisplayName  string `json:"display_name,omitempty"`
 	Unconfigured bool   `json:"unconfigured,omitempty"`
 	Removed      bool   `json:"removed,omitempty"`
 	Job          string `json:"job"`

@@ -14,6 +14,7 @@ const validation = {
 	rows: [
 		{
 			job: "job-a",
+			display_name: "Install · FIPS",
 			ocp: "4.18",
 			cloud: "AWS",
 			storage: "S3",
@@ -25,6 +26,7 @@ const validation = {
 		},
 		{
 			job: "job-b",
+			display_name: "Install · ARM64",
 			ocp: "4.19",
 			cloud: "GCP",
 			storage: "GCS",
@@ -154,6 +156,7 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 		.getByRole("combobox", { name: "Architecture", exact: true })
 		.selectOption("arm64");
 	await expect(page.getByText("GCP / GCS")).toBeVisible();
+	await expect(page.getByRole("link", {name: "Install · ARM64 ↗", exact: true})).toBeVisible();
 	await expect(page.getByText("The latest observed run tested a different FBC; no verified match was found.")).not.toBeVisible();
 	await page.locator(".rr-validation-table summary").click();
 	await expect(page.getByText("The latest observed run tested a different FBC; no verified match was found.")).toBeVisible();

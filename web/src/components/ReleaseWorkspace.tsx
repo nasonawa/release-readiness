@@ -369,7 +369,9 @@ function ValidationWorkbench({
 					Architecture
 					<select value={arch} onChange={(e) => setArch(e.target.value)}>
 						<option value="all">All architectures</option>
-						{[...new Set(data.rows?.map((r) => r.architecture))].map((a) => (
+						{[
+							...new Set(data.rows?.map((r) => r.architecture).filter(Boolean)),
+						].map((a) => (
 							<option value={a} key={a}>
 								{a}
 							</option>
@@ -404,14 +406,18 @@ function ValidationWorkbench({
 							<tr key={row.job}>
 								<td>
 									<a href={row.source_url} target="_blank" rel="noreferrer">
-										{[row.cloud, row.storage].filter(Boolean).join(" / ") ||
-											"Job configuration"}{" "}
-										↗
+										{row.display_name || row.mode || row.job} ↗
 									</a>
-									<p className="rr-muted">{row.mode}</p>
+									<p className="rr-muted">
+										{[row.cloud, row.storage].filter(Boolean).join(" / ")}
+									</p>
 								</td>
 								<td>
-									OCP {row.ocp}
+									{row.ocp
+										? `OCP ${row.ocp}`
+										: row.mode === "Standalone"
+											? "Standalone"
+											: "Not specified"}
 									<p className="rr-muted">{row.architecture}</p>
 								</td>
 								<td>

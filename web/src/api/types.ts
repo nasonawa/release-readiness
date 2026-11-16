@@ -312,6 +312,7 @@ export interface Validation {
 	rows?: ValidationRow[];
 }
 export interface ValidationRow {
+	display_name?: string;
 	evidence?: string;
 	job: string;
 	ocp: string;
