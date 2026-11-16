@@ -217,6 +217,7 @@ func syncWith(t *testing.T, f *fakeART) (*HistorySync, *fakeHistoryStore) {
 	t.Cleanup(srv.Close)
 	store := &fakeHistoryStore{}
 	h := NewHistorySync(NewClient(srv.URL, srv.Client()), store, slog.Default())
+	h.Groups = []string{"quay-3.17"}
 	h.pace.Reset(time.Millisecond)
 	h.now = func() time.Time { return time.Date(2026, 10, 12, 18, 0, 0, 0, time.UTC) }
 	return h, store

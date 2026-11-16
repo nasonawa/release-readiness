@@ -32,7 +32,9 @@ A run's `tested-images.json` also records the FBC catalog it installed from (`ca
 
 ### ART build history sync (every 10m, with `-art-build-history-url`)
 
-For each Quay stream with a stored Snapshot (ART group `quay-X.Y`), lists ART's successful FBC builds day by day: the newest 3 days every pass and up to 7 older unscanned days, back 120 days. An FBC is stored once the bundle it holds and the operator and operand images that bundle deploys are stored. A day listing at the 1000-row search cap is split by build name, the operators' FBC names and any the listing shows; a name that alone reaches the cap, or a search warning, is a sync error and the day is scanned again.
+For each explicitly configured ART group (`-art-groups` / `ART_GROUPS`, for example `quay-3.18,quay-5.0`), lists ART's successful FBC builds day by day: the newest 3 days every pass and up to 7 older unscanned days, back 120 days. An FBC is stored once the bundle it holds and the operator and operand images that bundle deploys are stored. A day listing at the 1000-row search cap is split by build name, the operators' FBC names and any the listing shows; a name that alone reaches the cap, or a search warning, is a sync error and the day is scanned again.
+
+ART history does not require Konflux snapshots, JIRA releases or Prow definitions to discover its groups. Empty group configuration reports waiting without claiming a successful scan. JIRA/catalog lifecycle metadata only sets priority; missing priority metadata leaves configured groups active. Compose supplies the Quay group list through `RR_ART_GROUPS`.
 
 ### FBC render (every 10m, with `-art-build-history-url`)
 

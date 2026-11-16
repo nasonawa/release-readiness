@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/quay/release-readiness/internal/syncstatus"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -15,31 +16,22 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 	started := time.Now()
 	activity, err := h.Activity(ctx)
 	if err != nil {
-		h.Status.Report(err)
-		return
-	}
-	apps, err := h.store.ListSnapshotApplications(ctx)
-	if err != nil {
-		h.Status.Report(err)
-		return
+		h.logger.Warn("ART priority metadata unavailable; treating configured groups as current", "error", err)
+		activity = nil
 	}
 	var active, historical []string
-	seen := map[string]bool{}
-	for _, app := range apps {
-		m := quayStream.FindStringSubmatch(app)
-		if m == nil {
-			continue
-		}
-		g := "quay-" + m[1] + "." + m[2]
-		if seen[g] {
-			continue
-		}
-		seen[g] = true
-		if current, known := activity["quay-"+m[1]+"-"+m[2]]; !known || current {
-			active = append(active, g)
+	for _, group := range h.Groups {
+		app := strings.ReplaceAll(group, ".", "-")
+		if current, known := activity[app]; !known || current {
+			active = append(active, group)
 		} else {
-			historical = append(historical, g)
+			historical = append(historical, group)
 		}
+	}
+	if len(active) == 0 && len(historical) == 0 {
+		h.Status.Report(errWaitingForStreams)
+		h.logger.Info("ART waiting for group configuration")
+		return
 	}
 	slices.Sort(active)
 	slices.Sort(historical)
@@ -70,8 +62,12 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 	}
 	pass.Add(current.Err())
 	cancel()
-	h.Status.Report(pass.Err())
-	h.logger.Info("ART foreground synced", "duration_ms", time.Since(started).Milliseconds(), "days_scanned", scanned, "failed", pass.Err() != nil)
+	if len(active) > 0 {
+		h.Status.Report(pass.Err())
+		h.logger.Info("ART foreground synced", "duration_ms", time.Since(started).Milliseconds(), "days_scanned", scanned, "failed", pass.Err() != nil)
+	} else {
+		h.logger.Info("ART foreground idle", "reason", "only historical streams discovered")
+	}
 	if pass.Err() != nil || ctx.Err() != nil {
 		return
 	}

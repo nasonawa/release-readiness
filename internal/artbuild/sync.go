@@ -51,6 +51,8 @@ var ErrOperandUnavailable = errors.New("operand not listed by ART build history"
 // errNoSuccess is a search that succeeded without a successful matching row.
 var errNoSuccess = errors.New("no successful build")
 
+var errWaitingForStreams = errors.New("ART history waiting for configuration: set -art-groups or ART_GROUPS")
+
 // HistoryBuild is a successful ART build record, with the source commit ART
 // built from. StartTime is as ART gives it.
 type HistoryBuild struct {
@@ -60,8 +62,6 @@ type HistoryBuild struct {
 
 // HistoryStore is the subset of the database layer the history sync needs.
 type HistoryStore interface {
-	// ListSnapshotApplications returns every application with a stored Snapshot.
-	ListSnapshotApplications(ctx context.Context) ([]string, error)
 	// ScannedArtHistoryDays returns the days of group's builds of buildType
 	// scanned complete, as YYYY-MM-DD.
 	ScannedArtHistoryDays(ctx context.Context, group, buildType string) ([]string, error)
@@ -83,6 +83,8 @@ type HistoryStore interface {
 // everything it names is, so a stored bundle is closed. An FBC is stored
 // even when a bundle it names is skipped for ErrOperandUnavailable.
 type HistorySync struct {
+	// Groups is the source-owned ART inventory; it never depends on JIRA or Konflux.
+	Groups []string
 	client *Client
 	store  HistoryStore
 	logger *slog.Logger
@@ -119,7 +121,7 @@ func (h *HistorySync) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// SyncOnce scans, for each stream with a stored Snapshot, the newest
+// SyncOnce scans, for each discovered stream, the newest
 // refreshDays and up to backfillPerPass older unscanned days, newest first.
 // A day is marked scanned only once all its successful FBC builds are stored.
 // It then reads the source repo of up to sourcesPerPass stored records that
@@ -131,18 +133,11 @@ func (h *HistorySync) SyncOnce(ctx context.Context) {
 	}
 	var pass syncstatus.Pass
 	defer func() { h.Status.Report(pass.Err()) }()
-	apps, err := h.store.ListSnapshotApplications(ctx)
-	if err != nil {
-		pass.Add(fmt.Errorf("list applications: %w", err))
+	groups := h.Groups
+	if len(groups) == 0 {
+		pass.Add(errWaitingForStreams)
+		h.logger.Info("ART waiting for stream discovery")
 		return
-	}
-	var groups []string
-	for _, a := range apps {
-		if m := quayStream.FindStringSubmatch(a); m != nil {
-			if g := "quay-" + m[1] + "." + m[2]; !slices.Contains(groups, g) {
-				groups = append(groups, g)
-			}
-		}
 	}
 	today := h.now().UTC()
 	// Each group's days to scan, newest first.

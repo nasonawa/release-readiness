@@ -55,6 +55,8 @@ func main() {
 	// ART build history flags
 	artURL := flag.String("art-build-history-url", "https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com", "ART build history service URL (empty disables ART build links)")
 
+	artGroups := flag.String("art-groups", os.Getenv("ART_GROUPS"), "comma-separated ART history groups (e.g. quay-3.18,quay-5.0); empty waits for configuration")
+
 	// ART FBC tag flags
 	artFBCQuayURL := flag.String("art-fbc-quay-url", artfbc.DefaultQuayURL, "Quay URL to list the tags of ART's public ocp-art-tenant/art-fbc repository from, unauthenticated, for the release inputs (empty disables)")
 
@@ -120,6 +122,12 @@ func main() {
 	}
 	if *sippyURL != "" && !*jobDiscovery {
 		logger.Error("-sippy-url requires -prow-job-discovery")
+		os.Exit(1)
+	}
+
+	groups, err := artbuild.ParseGroups(*artGroups)
+	if err != nil {
+		logger.Error("invalid ART groups", "error", err)
 		os.Exit(1)
 	}
 
@@ -251,6 +259,7 @@ func main() {
 		wg.Go(func() { resolver.Run(ctx, 5*time.Minute) })
 		history := artbuild.NewHistorySync(art, database, logger.With("component", "art-history"))
 		history.Activity = selector.IngestionActivity
+		history.Groups = groups
 		history.ForegroundBudget = *artCurrentBudget
 		history.BackfillBudget = *artHistoryBudget
 		history.BackfillInterval = *artHistoryInterval
