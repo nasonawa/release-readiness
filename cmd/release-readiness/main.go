@@ -101,6 +101,9 @@ func main() {
 	legacyInterval := flag.Duration("prow-live-refresh-interval", time.Hour, "GCS discovery interval for queued/running jobs absent from Sippy; 0 disables")
 	historyInterval := flag.Duration("prow-history-interval", time.Hour, "best-effort historical CI interval; one stream per pass, 0 disables")
 	historyBudget := flag.Duration("prow-history-budget", 30*time.Second, "maximum time per historical CI pass after unreleased streams")
+	artCurrentBudget := flag.Duration("art-current-budget", 2*time.Minute, "time budget for current-release ART history per pass")
+	artHistoryBudget := flag.Duration("art-history-budget", 30*time.Second, "best-effort historical ART time budget")
+	artHistoryInterval := flag.Duration("art-history-interval", time.Hour, "historical ART interval; one stream per pass, 0 disables")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -111,7 +114,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 || *historyInterval < 0 || *historyBudget <= 0 {
+	if *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 || *historyInterval < 0 || *historyBudget <= 0 || *artCurrentBudget <= 0 || *artHistoryBudget <= 0 || *artHistoryInterval < 0 {
 		logger.Error("invalid sync interval or lookback")
 		os.Exit(1)
 	}
@@ -247,8 +250,15 @@ func main() {
 		resolver.Status = status.Track("art-builds", 5*time.Minute)
 		wg.Go(func() { resolver.Run(ctx, 5*time.Minute) })
 		history := artbuild.NewHistorySync(art, database, logger.With("component", "art-history"))
-		history.Status = status.Track("art-history", 10*time.Minute)
-		wg.Go(func() { history.Run(ctx, 10*time.Minute) })
+		history.Activity = selector.IngestionActivity
+		history.ForegroundBudget = *artCurrentBudget
+		history.BackfillBudget = *artHistoryBudget
+		history.BackfillInterval = *artHistoryInterval
+		history.Status = status.Track("art-history", 2*time.Minute)
+		if *artHistoryInterval > 0 {
+			history.BackfillStatus = status.Track("art-backfill", 0)
+		}
+		wg.Go(func() { history.Run(ctx, 2*time.Minute) })
 		render := fbc.NewSync(fbc.NewRegistry(&http.Client{Timeout: 5 * time.Minute}), database, history, logger.With("component", "fbc-render"))
 		render.Status = status.Track("fbc-render", 10*time.Minute)
 		wg.Go(func() { render.Run(ctx, 10*time.Minute) })

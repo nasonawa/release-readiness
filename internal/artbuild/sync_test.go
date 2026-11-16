@@ -43,7 +43,8 @@ type fakeART struct {
 	// reads counts /build requests.
 	reads int
 	// failNVR is an NVR whose /search fails.
-	failNVR string
+	failNVR  string
+	failDate string
 }
 
 func pullspec(nvr string) string {
@@ -71,6 +72,10 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/search":
 		f.searches = append(f.searches, q)
+		if f.failDate != "" && q.Get("dateRange") == f.failDate {
+			http.Error(w, "history unavailable", 503)
+			return
+		}
 		if f.failNVR != "" && q.Get("nvr") == f.failNVR {
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
@@ -104,6 +109,7 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type fakeHistoryStore struct {
+	apps    []string
 	builds  []HistoryBuild
 	scanned []string
 	// sources maps a record ID to its name and source repo.
@@ -111,6 +117,9 @@ type fakeHistoryStore struct {
 }
 
 func (s *fakeHistoryStore) ListSnapshotApplications(context.Context) ([]string, error) {
+	if s.apps != nil {
+		return s.apps, nil
+	}
 	return []string{"fbc-quay-3-17", "quay-images-base"}, nil
 }
 
