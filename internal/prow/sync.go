@@ -69,6 +69,7 @@ func (c *Client) object(ctx context.Context, name string) ([]byte, error) {
 }
 
 func (c *Client) get(ctx context.Context, u string) ([]byte, error) {
+	countRequest(ctx, false)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err

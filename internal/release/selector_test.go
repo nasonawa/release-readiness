@@ -6,7 +6,9 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
@@ -58,5 +60,57 @@ func TestShipmentVersions(t *testing.T) {
 	}
 	if want := []string{"quay-v3.16.9", "quay-v3.17.6", "quay-v3.18.0"}; !slices.Equal(polled, want) {
 		t.Errorf("polled %v, want %v", polled, want)
+	}
+}
+
+func TestIngestionPriorityUsesFreshPublicationAndMixedStreams(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "priority.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = database.Close() }()
+	var failing atomic.Bool
+	cat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if failing.Load() {
+			w.WriteHeader(503)
+			return
+		}
+		_, _ = w.Write([]byte(`{"total":1,"data":[{"repositories":[{"published":true,"tags":[{"name":"3.17.5"},{"name":"3.16.7"}]}]}]}`))
+	}))
+	defer cat.Close()
+	shipped := catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
+	shipped.Refresh(t.Context())
+	for _, v := range []model.ReleaseVersion{
+		{Name: "quay-v3.17.5", KonfluxApplication: "quay-3-17"},
+		{Name: "quay-v3.16.7", KonfluxApplication: "quay-3-16"},
+		{Name: "quay-v3.16.8", KonfluxApplication: "quay-3-16"},
+		{Name: "quay-v5.0.0", KonfluxApplication: "quay-5-0"},
+	} {
+		if err := database.UpsertReleaseVersion(t.Context(), &v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := NewSelector(database, shipped)
+	active, err := s.IngestionActivity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active["quay-3-17"] || !active["quay-3-16"] || !active["quay-5-0"] {
+		t.Fatalf("wrong priorities %v", active)
+	}
+	if _, known := active["quay-9-0"]; known {
+		t.Fatal("unknown stream classified historical")
+	}
+	if !shipped.Fresh(time.Now()) || shipped.Fresh(time.Now().Add(4*time.Hour)) {
+		t.Fatal("publication freshness not bounded")
+	}
+	failing.Store(true)
+	shipped.Refresh(t.Context())
+	active, err = s.IngestionActivity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !active["quay-3-17"] {
+		t.Fatal("failed catalog demoted stream")
 	}
 }
