@@ -1060,6 +1060,8 @@ test("freshnessLine", () => {
 		{ source: "art-history", last_success: ago(7) },
 		{ source: "konflux", last_success: ago(1) },
 		{ source: "fbc-render", last_success: null },
+		{ source: "art-backfill", last_success: ago(90) },
+		{ source: "prow-history", last_success: ago(70) },
 	];
 	// A source on its first pass has no age yet.
 	assert.deepEqual(freshnessLine({ problems: [], sources }), {

@@ -95,6 +95,7 @@ type HistorySync struct {
 	ForegroundBudget, BackfillBudget, BackfillInterval time.Duration
 	BackfillStatus                                     *syncstatus.Source
 	lastBackfill                                       time.Time
+	foregroundCursor                                   int
 	backfillCursor                                     int
 }
 

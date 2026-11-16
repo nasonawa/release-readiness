@@ -26,6 +26,7 @@ type ValidationRow struct {
 	SourceURL    string `json:"source_url"`
 	State        string `json:"state"`
 	RunURL       string `json:"run_url,omitempty"`
+	Evidence     string `json:"evidence,omitempty"`
 }
 
 // PortfolioFacts is an additive overview projection, not a replacement for

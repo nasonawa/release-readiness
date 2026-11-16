@@ -93,9 +93,13 @@ func LoadValidationPlans(path string) (map[string]ValidationPlan, error) {
 func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, runs []prow.Run, fresh bool) model.Validation {
 	v := model.Validation{PlanKnown: plan.Revision != "", Revision: plan.Revision, SourceFresh: fresh, Total: len(plan.Jobs)}
 	exact := map[string]map[string]bool{}
+	selectedDigests := map[string]bool{}
 	if candidate.FBCCandidate != nil {
 		for _, op := range candidate.FBCCandidate.Operators {
 			for _, member := range op.Members {
+				if member.Digest != "" {
+					selectedDigests[member.Digest] = true
+				}
 				if member.CI == nil {
 					continue
 				}
@@ -115,8 +119,25 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 	// Index candidate-matched runs once, rather than scanning every run for
 	// every required matrix row.
 	completedByJob, runningByJob := map[string]*prow.Run{}, map[string]*prow.Run{}
+	observedByJob := map[string]*prow.Run{}
 	for i := range runs {
 		r := &runs[i]
+		old := observedByJob[r.JobName]
+		at := r.FetchedAt
+		if r.StartedAt != nil {
+			at = *r.StartedAt
+		}
+		if old == nil {
+			observedByJob[r.JobName] = r
+		} else {
+			oldAt := old.FetchedAt
+			if old.StartedAt != nil {
+				oldAt = *old.StartedAt
+			}
+			if at.After(oldAt) {
+				observedByJob[r.JobName] = r
+			}
+		}
 		if !exact[r.JobName][r.ProwURL] {
 			continue
 		}
@@ -132,19 +153,28 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 	for _, spec := range plan.Jobs {
 		row := spec
 		row.State, row.RunURL = "missing", ""
+		observed := observedByJob[spec.Job]
+		row.Evidence = missingEvidence(observed, selectedDigests)
+		if observed != nil {
+			row.RunURL = observed.ProwURL
+		}
 		completed, running := completedByJob[spec.Job], runningByJob[spec.Job]
-		if spec.Removed {
+		if spec.Removed || spec.Unconfigured {
 			completed, running = nil, nil
+			row.Evidence = "This job is no longer configured."
 		}
 		if completed != nil {
 			row.RunURL = completed.ProwURL
 			if completed.State == "success" && !completed.InstallFailed {
 				row.State = "passed"
+				row.Evidence = "Verified against the selected FBC."
 			} else {
 				row.State = "failed"
+				row.Evidence = "The latest completed run against the selected FBC failed."
 			}
 		} else if running != nil {
 			row.State, row.RunURL = "running", running.ProwURL
+			row.Evidence = "The selected-FBC run is still in progress."
 		}
 		switch row.State {
 		case "passed":
@@ -160,4 +190,30 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 	}
 	v.Ready = v.PlanKnown && v.Total > 0 && v.Passed == v.Total && fresh && candidate.Verdict.State == "ready"
 	return v
+}
+
+func missingEvidence(run *prow.Run, selected map[string]bool) string {
+	if run == nil {
+		return "No run has been ingested for this configured job."
+	}
+	if run.State == "running" || run.State == "pending" || run.State == "triggered" {
+		return "A run is in progress; its candidate identity is not yet verified."
+	}
+	if run.ArtifactState == prow.ArtifactInvalid {
+		return "The run's image evidence is invalid; it will be retried."
+	}
+	if run.ArtifactState == prow.ArtifactMissing || run.ArtifactState == prow.ArtifactNone {
+		return "The run is recorded, but its image evidence is unavailable; retry is scheduled."
+	}
+	digest := ImageDigest(run.CatalogRef)
+	if digest == "" {
+		return "The run has evidence without an exact FBC identity; it cannot satisfy this gate."
+	}
+	if len(selected) == 0 {
+		return "The run is recorded; selected FBC identity is not yet available for matching."
+	}
+	if !selected[digest] {
+		return "The latest observed run tested a different FBC; no verified match was found."
+	}
+	return "The run names the selected FBC; candidate correlation is not yet complete."
 }

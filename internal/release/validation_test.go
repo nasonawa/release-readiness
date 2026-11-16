@@ -3,6 +3,7 @@ package release
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,5 +59,38 @@ func TestLoadValidationPlans(t *testing.T) {
 		if _, err := LoadValidationPlans(path); err == nil {
 			t.Fatalf("accepted invalid plan: %s", body)
 		}
+	}
+}
+
+func TestValidationExplainsMissingEvidenceWithoutPassing(t *testing.T) {
+	plan := ValidationPlan{Revision: "periodics:rev", Jobs: []model.ValidationRow{{Job: "required"}}}
+	candidate := &model.ReleaseCandidate{Verdict: model.Verdict{State: "ready"}, FBCCandidate: &model.FBCCandidate{Operators: []model.OperatorFBC{{Members: []model.FBCMember{{Digest: "sha256:selected"}}}}}}
+	for _, tc := range []struct {
+		name    string
+		run     *prow.Run
+		message string
+	}{
+		{"no runs", nil, "No run has been ingested"},
+		{"missing artifact", &prow.Run{ArtifactState: prow.ArtifactNone}, "image evidence is unavailable"},
+		{"legacy", &prow.Run{ArtifactState: prow.ArtifactPresent}, "without an exact FBC identity"},
+		{"other FBC", &prow.Run{ArtifactState: prow.ArtifactPresent, CatalogRef: "quay.io/catalog@sha256:other"}, "different FBC"},
+		{"unresolved match", &prow.Run{ArtifactState: prow.ArtifactPresent, CatalogRef: "quay.io/catalog@sha256:selected"}, "correlation is not yet complete"},
+		{"running", &prow.Run{State: "running"}, "in progress"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var runs []prow.Run
+			if tc.run != nil {
+				tc.run.JobName = "required"
+				tc.run.ProwURL = "https://prow.example/observed"
+				runs = append(runs, *tc.run)
+			}
+			v := EvaluateValidation(plan, candidate, runs, true)
+			if v.Ready || v.Passed != 0 || v.Missing != 1 || !strings.Contains(v.Rows[0].Evidence, tc.message) {
+				t.Fatalf("wrong evidence: %+v", v)
+			}
+			if tc.run != nil && v.Rows[0].RunURL != tc.run.ProwURL {
+				t.Fatal("observed run cannot be inspected")
+			}
+		})
 	}
 }

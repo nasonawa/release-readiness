@@ -926,6 +926,7 @@ export const worst = (r: ReleaseImage) => Math.min(3, ...r.issues.map(rank));
 export const SOURCE_NAMES: Record<string, string> = {
 	"prow-inventory": "CI job configuration",
 	"prow-history": "Historical CI",
+	"art-backfill": "ART historical backfill",
 	konflux: "Konflux releases",
 	"art-builds": "ART builds",
 	"art-history": "ART build history",
@@ -939,8 +940,13 @@ export const SOURCE_NAMES: Record<string, string> = {
 	retention: "Retention",
 };
 
-// Sources no page reads: the daily prune and the FBC Jira writer.
-const NON_DATA = new Set(["retention", "reconcile"]);
+// Maintenance and separately paced history do not date foreground freshness.
+const NON_DATA = new Set([
+	"retention",
+	"reconcile",
+	"art-backfill",
+	"prow-history",
+]);
 
 /**
  * How current the page's data is: when the least recent data source not

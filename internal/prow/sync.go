@@ -341,6 +341,7 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 // storage's quay-deploy step creates the quay-operator Subscription, then
 // waits for its CSV and the QuayRegistry.
 var installSteps = map[string]string{
+	"aws-s3":              "quay-deploy-aws-s3",
 	"aws-s3-nightly":      "quay-deploy-aws-s3",
 	"aws-s3-nightly-fips": "quay-deploy-aws-s3",
 	"libvirt-s3-nightly":  "quay-deploy-aws-s3",

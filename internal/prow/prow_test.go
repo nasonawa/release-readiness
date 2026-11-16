@@ -351,6 +351,12 @@ func TestSyncInstallFailed(t *testing.T) {
 		{desc: "install failed after the CSV", id: periodicRun, want: true, reads: 1, extra: map[string][]byte{
 			dir(periodicRun) + deploy: []byte(`{"timestamp":1789612696,"passed":false,"result":"FAILURE"}`),
 		}},
+		{desc: "legacy aws-s3 failed install", id: periodicRun, want: true, reads: 1, extra: map[string][]byte{
+			dir(periodicRun) + "prowjob.json":                                              []byte(`{"spec":{"pod_spec":{"containers":[{"args":["--target=aws-s3"]}]}},"status":{"state":"failure"}}`),
+			dir(periodicRun) + "finished.json":                                             []byte(`{"timestamp":1789612696,"result":"failure"}`),
+			dir(periodicRun) + "artifacts/aws-s3/quay-gather/artifacts/tested-images.json": runFixture(t, job, periodicRun, "artifacts/aws-s3-nightly/quay-gather/artifacts/tested-images.json"),
+			dir(periodicRun) + "artifacts/aws-s3/quay-deploy-aws-s3/finished.json":         []byte(`{"timestamp":1789612696,"result":"failure"}`),
+		}},
 		{desc: "installed, then failed", id: periodicRun, reads: 1},
 		{desc: "passed", id: installRun, extra: map[string][]byte{
 			dir(installRun) + "finished.json": []byte(`{"timestamp":1791602726,"passed":true,"result":"SUCCESS"}`),
