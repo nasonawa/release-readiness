@@ -26,7 +26,7 @@ export default function ValidationProgress({ data }: { data?: Validation }) {
 				<strong>
 					{data.passed} of {data.total}
 				</strong>{" "}
-				required jobs passed
+				required jobs passed for the selected FBC
 			</p>
 			<div
 				className="rr-progress-track"
@@ -42,8 +42,8 @@ export default function ValidationProgress({ data }: { data?: Validation }) {
 				))}
 			</div>
 			<p className="rr-muted">
-				{data.failed} failed · {data.running} running · {data.missing} awaiting
-				evidence
+				{data.failed} failed · {data.running} running · {data.missing} without a
+				matching selected-FBC run
 			</p>
 			{!data.source_fresh && (
 				<p className="rr-muted">Required sources are not up to date.</p>

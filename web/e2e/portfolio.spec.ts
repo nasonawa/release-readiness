@@ -332,3 +332,29 @@ test("confirmed active CI is Running with compact evidence details", async ({ pa
 	await table.locator("summary").click();
 	await expect(table.getByText("The selected-FBC run is still in progress.")).toBeVisible();
 });
+
+test("observed CI success stays separate from selected-FBC readiness", async ({ page }) => {
+	await page.route("**/api/v1/releases/*/validation", (route) => route.fulfill({ json: {
+		...validation, passed: 0, running: 0, missing: 2, total: 2,
+		rows: [
+			{ ...validation.rows[0], display_name: "Install · ARM64", state: "missing", ci_result: "passed", fbc_match: "newer",
+				evidence: "This run tested a newer ART FBC than the selected candidate.",
+				tested_fbc: {nvr:"newer-build", digest:"sha256:newer"}, selected_fbc: {nvr:"selected-build", digest:"sha256:selected"} },
+			{ ...validation.rows[1], display_name: "Install · RDS", state: "missing", run_url: undefined, evidence: "No run has been ingested for this configured job." },
+		],
+	} }));
+	await page.goto("/releases/quay-v3.18.4?view=workbench");
+	const table = page.locator(".rr-validation-table");
+	const arm = table.locator("tbody tr").filter({hasText:"Install · ARM64"});
+	await expect(arm.getByText("Passed · newer FBC", {exact:true})).toBeVisible();
+	await expect(arm.getByText("No matching run for selected FBC", {exact:true})).toBeVisible();
+	await expect(table.locator("tbody tr").filter({hasText:"Install · RDS"}).getByText("No matching run for selected FBC", {exact:true})).toBeVisible();
+	await expect(page.getByText("0 of 2", {exact:true})).toBeVisible();
+	await arm.locator("summary").click();
+	await expect(arm.getByText("sha256:newer", {exact:true})).toBeVisible();
+	await expect(arm.getByText("sha256:selected", {exact:true})).toBeVisible();
+	await page.getByRole("combobox", {name:"CI result",exact:true}).selectOption("passed");
+	await expect(table.locator("tbody tr")).toHaveCount(1);
+	await page.getByRole("combobox", {name:"CI result",exact:true}).selectOption("unmatched");
+	await expect(table.locator("tbody tr")).toHaveCount(2);
+});
