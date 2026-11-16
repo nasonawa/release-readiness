@@ -29,7 +29,7 @@ func (d *DB) ProwApplicationActivity(ctx context.Context) (map[string]bool, erro
 }
 
 // CandidateWindowStart uses ART build time, never the local observation time.
-// Any active version without a dated FBC broadens the search to retention.
+// Versions without a dated FBC do not schedule CI lookups.
 func (d *DB) CandidateWindowStart(ctx context.Context, app string) (time.Time, error) {
 	parts := strings.Split(app, "-")
 	if len(parts) != 3 {
@@ -75,16 +75,16 @@ func (d *DB) CandidateWindowStartForVersions(ctx context.Context, app string, na
 		}
 		at, err := time.Parse(time.RFC3339Nano, row.StartTime)
 		if err != nil {
+			// ART also emits UTC without an explicit zone. This is build
+			// start time, not publication time; CI uses a bounded lookback.
+			at, err = time.Parse("2006-01-02T15:04:05", row.StartTime)
+		}
+		if err != nil {
 			continue
 		}
 		active[version] = true
 		if earliest.IsZero() || at.Before(earliest) {
 			earliest = at
-		}
-	}
-	for _, found := range active {
-		if !found {
-			return time.Time{}, nil
 		}
 	}
 	return earliest, nil

@@ -114,6 +114,9 @@ type Syncer struct {
 	// in jobs keeps its application.
 	Pattern   *JobPattern
 	Inventory InventoryStore
+	// WindowStart enables candidate-driven lookup for direct GCS mode too.
+	WindowStart func(context.Context, string) (time.Time, error)
+	Lookback    time.Duration
 }
 
 func NewSyncer(client *Client, store Store, jobs []Job, interval time.Duration, logger *slog.Logger) *Syncer {
@@ -144,7 +147,25 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		pass.Add(fmt.Errorf("discover jobs: %w", err))
 	}
 	for _, job := range jobs {
-		n, err := s.syncJob(ctx, job)
+		var n int
+		var err error
+		if s.WindowStart == nil {
+			n, err = s.syncJob(ctx, job)
+		} else {
+			var start time.Time
+			start, err = s.WindowStart(ctx, job.Application)
+			if err == nil && start.IsZero() {
+				continue
+			}
+			if err == nil {
+				now := time.Now().UTC()
+				if start.After(now) {
+					err = fmt.Errorf("FBC build start is in the future")
+				} else {
+					n, err = s.syncJobWindow(ctx, job, maxWindowStart(now, s.Retention, start, s.Lookback), now)
+				}
+			}
+		}
 		if err != nil {
 			s.logger.Error("sync job", "job", job.Name, "error", err)
 			pass.Add(fmt.Errorf("%s: %w", job.Name, err))
@@ -199,6 +220,12 @@ func (s *Syncer) discover(ctx context.Context) ([]Job, error) {
 // is read newest first, up to its first run that predates the retention
 // window, so a long-idle job does not backfill its history.
 func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
+	return s.syncJobWindow(ctx, job, time.Time{}, time.Time{})
+}
+
+// syncJobWindow bounds live GCS discovery to the same candidate window as
+// Sippy. Old run metadata may be read to find the boundary, but not artifacts.
+func (s *Syncer) syncJobWindow(ctx context.Context, job Job, from, until time.Time) (int, error) {
 	ids, err := s.client.listDirs(ctx, job.Prefix, "")
 	if err != nil {
 		return 0, err
@@ -216,7 +243,10 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 		return 0, err
 	}
 	cutoff := time.Now().Add(-s.Retention)
-	if unstored {
+	if !from.IsZero() {
+		cutoff = from
+	}
+	if unstored || !from.IsZero() {
 		// Build IDs are decimal, so a longer one is larger.
 		slices.SortFunc(ids, func(a, b string) int {
 			return cmp.Or(cmp.Compare(len(b), len(a)), strings.Compare(b, a))
@@ -228,11 +258,17 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 		if done[id] || expired(id) {
 			continue
 		}
-		run, err := s.fetchRun(ctx, job, id)
+		run, err := s.fetchRunWindow(ctx, job, id, from, until)
 		if err != nil {
 			return n, fmt.Errorf("run %s: %w", id, err)
 		}
 		if run == nil {
+			continue
+		}
+		if !from.IsZero() && run.StartedAt != nil && run.StartedAt.Before(cutoff) {
+			continue
+		}
+		if !until.IsZero() && (run.StartedAt == nil || run.StartedAt.After(until)) {
 			continue
 		}
 		if unstored {
@@ -293,6 +329,10 @@ func (s *Syncer) expired(ctx context.Context, job string) (func(id string) bool,
 
 // fetchRun returns nil when the run has no readable prowjob.json yet.
 func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error) {
+	return s.fetchRunWindow(ctx, job, id, time.Time{}, time.Time{})
+}
+
+func (s *Syncer) fetchRunWindow(ctx context.Context, job Job, id string, from, until time.Time) (*Run, error) {
 	dir := job.Prefix + id + "/"
 	pjData, err := s.client.object(ctx, dir+"prowjob.json")
 	if err != nil || pjData == nil {
@@ -306,6 +346,9 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 	if err != nil {
 		s.logger.Warn("skip run", "job", job.Name, "build_id", id, "error", err)
 		return nil, nil
+	}
+	if !from.IsZero() && (run.StartedAt == nil || run.StartedAt.Before(from)) || !until.IsZero() && (run.StartedAt == nil || run.StartedAt.After(until)) {
+		return run, nil
 	}
 	run.FetchedAt = time.Now().UTC()
 	run.ArtifactState = ArtifactNone

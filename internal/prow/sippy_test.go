@@ -50,7 +50,7 @@ func (m *sippyMemory) UpsertProwRuns(_ context.Context, runs []*Run) error {
 func productionSippy(t *testing.T, jobs []experimentJob) (*SippySync, *experimentAPI, *sippyMemory) {
 	t.Helper()
 	a := newExperimentAPI(t, jobs)
-	m := &sippyMemory{runs: map[string]Run{}}
+	m := &sippyMemory{runs: map[string]Run{}, start: time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)}
 	for _, j := range jobs {
 		m.definitions = append(m.definitions, JobDefinition{Name: j.Name, Application: j.Application, Target: j.Target})
 	}
@@ -369,5 +369,74 @@ func TestActiveRunReadsFBCBeforeCompletion(t *testing.T) {
 				t.Fatalf("active reads: %v", counts)
 			}
 		}
+	}
+}
+
+func TestCIDiscoveryWaitsForCandidateThenResumes(t *testing.T) {
+	jobs := experimentInventory(t)[:1]
+	s, a, m := productionSippy(t, jobs)
+	m.start = time.Time{}
+	s.Artifacts.store = &memStore{runs: map[string]*Run{}}
+	s.LegacyInterval = time.Minute
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if counts := a.takeCounts(); len(counts) != 0 {
+		t.Fatalf("inventory alone fetched CI: %v", counts)
+	}
+	if !s.idle || !s.lastLegacy.IsZero() {
+		t.Fatal("idle CI pass reported work or delayed first live lookup")
+	}
+	m.start = a.rows[jobs[0].Release][0].Timestamp
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	counts := experimentCategories(a.takeCounts())
+	if counts["sippy"] == 0 || counts["tested-images"] == 0 || counts["listing"] == 0 || s.idle {
+		t.Fatalf("candidate did not schedule lookup: %v", counts)
+	}
+}
+
+func TestOnlyMatchedStreamsScheduleCI(t *testing.T) {
+	jobs := experimentInventory(t)
+	s, a, m := productionSippy(t, jobs)
+	s.WindowStart = func(_ context.Context, app string) (time.Time, error) {
+		if app == "quay-3-18" {
+			return m.start, nil
+		}
+		return time.Time{}, nil
+	}
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(a.releases, []string{"quay-3.18"}) {
+		t.Fatalf("unmatched streams queried or duplicate query: %v", a.releases)
+	}
+}
+
+func TestLiveDiscoverySkipsArtifactsOutsideCandidateWindow(t *testing.T) {
+	jobs := experimentInventory(t)[:1]
+	s, a, _ := productionSippy(t, jobs)
+	s.Artifacts.store = &memStore{runs: map[string]*Run{}}
+	rows := a.rows[jobs[0].Release]
+	from := rows[0].Timestamp.Add(time.Second)
+	_, err := s.Artifacts.syncJobWindow(t.Context(), jobs[0].prowJob(), from, s.clock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := a.takeCounts()
+	for path, n := range counts {
+		if n > 0 && strings.Contains(path, rows[0].ID+"/artifacts/") {
+			t.Fatalf("read old run artifact %s", path)
+		}
+	}
+}
+
+func TestLegacyModeWaitsForCandidate(t *testing.T) {
+	s, a, _ := productionSippy(t, experimentInventory(t)[:1])
+	s.Artifacts.WindowStart = func(context.Context, string) (time.Time, error) { return time.Time{}, nil }
+	s.Artifacts.SyncOnce(t.Context())
+	if counts := a.takeCounts(); len(counts) != 0 {
+		t.Fatalf("direct GCS bypassed candidate scheduling: %v", counts)
 	}
 }
