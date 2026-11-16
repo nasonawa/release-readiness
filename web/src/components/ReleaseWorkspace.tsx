@@ -22,6 +22,7 @@ import type {
 	ReleaseCandidate,
 	ReleaseDetail,
 	Validation,
+	ValidationRow,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import {
@@ -342,7 +343,10 @@ function ValidationWorkbench({
 		);
 	const rows = (data.rows || []).filter(
 		(r) =>
-			(status === "all" || r.state === status) &&
+			(status === "all" ||
+				(status === "unmatched"
+					? r.state === "missing"
+					: (r.ci_result || r.state) === status)) &&
 			(arch === "all" || r.architecture === arch),
 	);
 	return (
@@ -350,19 +354,26 @@ function ValidationWorkbench({
 			<h2>Required validation matrix</h2>
 			<ValidationProgress data={data} />
 			<p className="rr-muted">
-				Plan {data.revision.slice(0, 12)} · Exact selected-FBC evidence ·
-				Filters do not change the release denominator.
+				Progress counts runs against the selected FBC. Results also show
+				observed CI runs for other FBCs; those do not count toward shipment
+				readiness.
 			</p>
 			<div className="rr-portfolio-tools">
 				<label>
-					Status
+					CI result
 					<select value={status} onChange={(e) => setStatus(e.target.value)}>
 						<option value="all">All statuses</option>
-						{["passed", "failed", "running", "missing"].map((s) => (
-							<option key={s} value={s}>
-								{s === "missing" ? "Awaiting evidence" : s}
-							</option>
-						))}
+						{["passed", "failed", "running", "missing", "unmatched"].map(
+							(s) => (
+								<option key={s} value={s}>
+									{s === "missing"
+										? "No CI result"
+										: s === "unmatched"
+											? "No selected-FBC run"
+											: s}
+								</option>
+							),
+						)}
 					</select>
 				</label>
 				<label>
@@ -421,21 +432,7 @@ function ValidationWorkbench({
 									<p className="rr-muted">{row.architecture}</p>
 								</td>
 								<td>
-									<Label
-										color={
-											row.state === "passed"
-												? "green"
-												: row.state === "failed"
-													? "red"
-													: row.state === "running"
-														? "blue"
-														: "grey"
-										}
-									>
-										{row.state === "missing"
-											? "Awaiting evidence"
-											: row.state.charAt(0).toUpperCase() + row.state.slice(1)}
-									</Label>
+									<ValidationResult row={row} />
 								</td>
 								<td>
 									{row.run_url ? (
@@ -450,6 +447,20 @@ function ValidationWorkbench({
 									<details>
 										<summary>Details</summary>
 										{row.evidence && <p className="rr-muted">{row.evidence}</p>}
+										{row.tested_fbc && (
+											<p className="rr-muted">
+												Tested FBC: {row.tested_fbc.nvr}
+												<br />
+												<code>{row.tested_fbc.digest}</code>
+											</p>
+										)}
+										{row.selected_fbc && (
+											<p className="rr-muted">
+												Selected FBC: {row.selected_fbc.nvr}
+												<br />
+												<code>{row.selected_fbc.digest}</code>
+											</p>
+										)}
 										<code>{row.job}</code>
 									</details>
 								</td>
@@ -465,6 +476,40 @@ function ValidationWorkbench({
 				history.
 			</p>
 		</section>
+	);
+}
+
+function ValidationResult({ row }: { row: ValidationRow }) {
+	const result = row.ci_result || row.state;
+	const unmatched = row.state === "missing";
+	if (result === "missing") {
+		return <Label color="grey">No matching run for selected FBC</Label>;
+	}
+	const qualifier = unmatched
+		? row.fbc_match === "newer"
+			? "newer FBC"
+			: row.fbc_match === "different"
+				? "different FBC"
+				: "FBC unverified"
+		: "";
+	return (
+		<>
+			<Label
+				color={
+					result === "failed"
+						? "red"
+						: result === "passed" && !unmatched
+							? "green"
+							: "blue"
+				}
+			>
+				{result.charAt(0).toUpperCase() + result.slice(1)}
+				{qualifier && ` · ${qualifier}`}
+			</Label>
+			{unmatched && (
+				<p className="rr-muted">No matching run for selected FBC</p>
+			)}
+		</>
 	);
 }
 

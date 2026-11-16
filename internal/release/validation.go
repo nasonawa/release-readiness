@@ -217,6 +217,11 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 				row.Evidence = "The latest completed run against the selected FBC failed."
 			}
 		}
+		if row.State != "missing" {
+			row.CIResult, row.FBCMatch = row.State, "selected"
+		} else if observed != nil && !spec.Removed && !spec.Unconfigured {
+			populateObservedValidation(&row, observed, candidate, selectedDigests)
+		}
 		switch row.State {
 		case "passed":
 			v.Passed++

@@ -312,6 +312,10 @@ export interface Validation {
 	rows?: ValidationRow[];
 }
 export interface ValidationRow {
+	ci_result?: "passed" | "failed" | "running";
+	fbc_match?: "selected" | "newer" | "different" | "unverified";
+	tested_fbc?: { digest: string; nvr?: string };
+	selected_fbc?: { digest: string; nvr?: string };
 	display_name?: string;
 	evidence?: string;
 	job: string;

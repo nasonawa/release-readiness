@@ -14,20 +14,25 @@ type Validation struct {
 	Rows        []ValidationRow `json:"rows,omitempty"`
 }
 
+// CIResult describes the displayed run; State remains the selected-FBC gate.
 type ValidationRow struct {
-	DisplayName  string `json:"display_name,omitempty"`
-	Unconfigured bool   `json:"unconfigured,omitempty"`
-	Removed      bool   `json:"removed,omitempty"`
-	Job          string `json:"job"`
-	OCP          string `json:"ocp"`
-	Cloud        string `json:"cloud"`
-	Storage      string `json:"storage"`
-	Architecture string `json:"architecture"`
-	Mode         string `json:"mode"`
-	SourceURL    string `json:"source_url"`
-	State        string `json:"state"`
-	RunURL       string `json:"run_url,omitempty"`
-	Evidence     string `json:"evidence,omitempty"`
+	CIResult     string         `json:"ci_result,omitempty"`
+	FBCMatch     string         `json:"fbc_match,omitempty"`
+	TestedFBC    *ValidationFBC `json:"tested_fbc,omitempty"`
+	SelectedFBC  *ValidationFBC `json:"selected_fbc,omitempty"`
+	DisplayName  string         `json:"display_name,omitempty"`
+	Unconfigured bool           `json:"unconfigured,omitempty"`
+	Removed      bool           `json:"removed,omitempty"`
+	Job          string         `json:"job"`
+	OCP          string         `json:"ocp"`
+	Cloud        string         `json:"cloud"`
+	Storage      string         `json:"storage"`
+	Architecture string         `json:"architecture"`
+	Mode         string         `json:"mode"`
+	SourceURL    string         `json:"source_url"`
+	State        string         `json:"state"`
+	RunURL       string         `json:"run_url,omitempty"`
+	Evidence     string         `json:"evidence,omitempty"`
 }
 
 // PortfolioFacts is an additive overview projection, not a replacement for
@@ -37,4 +42,10 @@ type PortfolioFacts struct {
 	Verdict    Verdict    `json:"verdict"`
 	Validation Validation `json:"validation"`
 	Error      string     `json:"error,omitempty"`
+}
+
+// ValidationFBC identifies the catalogs compared for a displayed run.
+type ValidationFBC struct {
+	Digest string `json:"digest"`
+	NVR    string `json:"nvr,omitempty"`
 }

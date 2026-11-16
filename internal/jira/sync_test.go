@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,8 @@ func TestSyncOnceSyncsShippedUnarchivedVersions(t *testing.T) {
 
 	s.SyncOnce(context.Background())
 
+	// Worker completion order is unspecified; all retained versions must sync.
+	slices.Sort(store.synced)
 	if got := strings.Join(store.synced, ","); got != "quay-v3.17.4,quay-v3.17.5" {
 		t.Errorf("synced = %s, want the retained versions", got)
 	}
