@@ -38,10 +38,47 @@ func (r *PlanRegistry) Update(jobs []prow.JobDefinition, revision string) {
 		}
 		p := snapshot.plans[j.Application]
 		p.Revision = snapshot.revision
-		p.Jobs = append(p.Jobs, model.ValidationRow{Job: j.Name, OCP: j.OCP, Cloud: j.Cloud, SourceURL: j.SourceURL})
+		cloud, storage := validationConfiguration(j)
+		p.Jobs = append(p.Jobs, model.ValidationRow{Job: j.Name, OCP: j.OCP, Cloud: cloud, Storage: storage, SourceURL: j.SourceURL})
 		snapshot.plans[j.Application] = p
 	}
 	r.current.Store(snapshot)
+}
+
+// validationConfiguration formats metadata from the periodic configuration.
+// These labels never add requirements or infer a job's result. Unknown storage
+// stays unspecified rather than being guessed from the cloud provider.
+func validationConfiguration(job prow.JobDefinition) (string, string) {
+	cloud := job.Cloud
+	switch cloud {
+	case "aws":
+		cloud = "AWS"
+	case "gcp":
+		cloud = "GCP"
+	case "azure", "azure4":
+		cloud = "Azure"
+	case "libvirt", "libvirt-s390x-vpn":
+		cloud = "Libvirt"
+	}
+	storage := ""
+	for _, token := range strings.Split(job.Target, "-") {
+		switch token {
+		case "s3":
+			storage = "S3"
+		case "odf":
+			storage = "ODF"
+		case "gcs":
+			storage = "GCS"
+		case "blob":
+			storage = "Blob"
+		}
+	}
+	// Upgrade targets name the source version (from-318); their periodic
+	// name, rather than the target, identifies the configured storage.
+	if storage == "" && strings.Contains(job.Name, "-s3-upgrade-") {
+		storage = "S3"
+	}
+	return cloud, storage
 }
 
 func (r *PlanRegistry) Plan(app string) ValidationPlan {
