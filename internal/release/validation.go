@@ -38,8 +38,7 @@ func (r *PlanRegistry) Update(jobs []prow.JobDefinition, revision string) {
 		}
 		p := snapshot.plans[j.Application]
 		p.Revision = snapshot.revision
-		cloud, storage := validationConfiguration(j)
-		p.Jobs = append(p.Jobs, model.ValidationRow{Job: j.Name, OCP: j.OCP, Cloud: cloud, Storage: storage, SourceURL: j.SourceURL})
+		p.Jobs = append(p.Jobs, validationJobRow(j))
 		snapshot.plans[j.Application] = p
 	}
 	r.current.Store(snapshot)
