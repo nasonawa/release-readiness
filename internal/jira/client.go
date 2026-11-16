@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/quay/release-readiness/internal/workpool"
 	"io"
 	"net/http"
 	"net/url"
@@ -32,6 +33,7 @@ type Client struct {
 	token      string
 	project    string
 	httpClient *http.Client
+	pace       workpool.Pacer
 	minDelay   time.Duration // minimum delay between requests
 }
 
@@ -218,7 +220,10 @@ func (c *Client) doGetWithRetry(ctx context.Context, reqURL string) ([]byte, err
 	const maxRetries = 3
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 || c.minDelay > 0 {
+		if err := c.pace.Wait(ctx, c.minDelay); err != nil {
+			return nil, err
+		}
+		if attempt > 0 {
 			delay := c.minDelay
 			if attempt > 0 {
 				// Exponential backoff: 2s, 4s, 8s
