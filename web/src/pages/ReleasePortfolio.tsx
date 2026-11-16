@@ -171,6 +171,11 @@ export default function ReleasePortfolio() {
 				) : (
 					<ValidationProgress data={ov.portfolio?.validation} />
 				)}
+				{ov.published &&
+					ov.portfolio?.validation.plan_known &&
+					ov.portfolio.validation.total === 0 && (
+						<p className="rr-muted">No CI configured</p>
+					)}
 				<div className="rr-card-facts">
 					<span>{ticket(ov)}</span>
 					<span>{ov.release.release_ticket_assignee || "Unassigned"}</span>

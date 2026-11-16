@@ -213,3 +213,97 @@ test("accessible controls, mobile layout and reduced motion", async ({
 		fullPage: true,
 	});
 });
+
+test("no configured jobs differs from unavailable inventory", async ({
+	page,
+}) => {
+	const empty = { ...validation, total: 0, passed: 0, missing: 0, rows: [] };
+	await page.route("**/api/v1/releases/overview?*", (route) =>
+		route.fulfill({
+			json: releases.map((r) => ({
+				...r,
+				portfolio: { ...r.portfolio, validation: empty },
+			})),
+		}),
+	);
+	await page.route("**/api/v1/releases/*/validation", (route) =>
+		route.fulfill({ json: empty }),
+	);
+	await page.goto("/");
+	await expect(
+		page.locator(".rr-card-grid").getByText("No CI configured"),
+	).toHaveCount(2);
+	await page
+		.getByRole("heading", { name: "Quay 3.18", exact: true })
+		.getByRole("link")
+		.click();
+	await page
+		.getByRole("tab", { name: "Validation workbench", exact: true })
+		.click();
+	await expect(
+		page.getByRole("tabpanel").getByText("No CI configured", { exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByText("CI readiness cannot be established.", { exact: false }),
+	).toBeVisible();
+	await page.route("**/api/v1/releases/*/validation", (route) =>
+		route.fulfill({ json: { ...empty, plan_known: false } }),
+	);
+	await page.reload();
+	await expect(
+		page
+			.getByRole("tabpanel")
+			.getByRole("heading", { name: /CI configuration unavailable/ }),
+	).toBeVisible();
+});
+
+test("long source-status popover stays within the viewport", async ({
+	page,
+}, testInfo) => {
+	await page.route("**/api/v1/sync-status", (route) =>
+		route.fulfill({
+			json: {
+				sources: [],
+				problems: ["jira", "konflux", "prow", "fbc-render", "image-scans"].map(
+					(source) => ({
+						source,
+						message: "Source failure: ".repeat(25),
+						since: new Date().toISOString(),
+						last_success: null,
+					}),
+				),
+			},
+		}),
+	);
+	for (const [width, height] of [
+		[1366, 768],
+		[720, 640],
+		[390, 560],
+	]) {
+		await page.setViewportSize({ width, height });
+		await page.goto("/");
+		await page.getByRole("button", { name: /4 sources stale/ }).click();
+		const popup = page.locator(".rr-source-popover:visible");
+		await expect(popup).toBeVisible();
+		await page.screenshot({
+			path: testInfo.outputPath(`source-status-${width}.png`),
+		});
+		await expect(async () => {
+			const box = await popup.boundingBox();
+			expect(box).not.toBeNull();
+			expect(box!.y).toBeGreaterThanOrEqual(0);
+			expect(box!.x).toBeGreaterThanOrEqual(0);
+			expect(box!.y + box!.height).toBeLessThanOrEqual(height);
+			expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+		}).toPass({ timeout: 3000 });
+		const content = popup.locator(".pf-v6-c-popover__content");
+		expect(
+			await content.evaluate((el) => el.scrollHeight > el.clientHeight),
+		).toBe(true);
+		await page.screenshot({
+			path: testInfo.outputPath(`source-status-${width}.png`),
+		});
+		await page.keyboard.press("Escape");
+		await expect(popup).not.toBeVisible();
+	}
+});

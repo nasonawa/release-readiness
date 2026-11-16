@@ -924,6 +924,8 @@ export const worst = (r: ReleaseImage) => Math.min(3, ...r.issues.map(rank));
 
 // Sync source ids as the page names them.
 export const SOURCE_NAMES: Record<string, string> = {
+	"prow-inventory": "CI job configuration",
+	"prow-history": "Historical CI",
 	konflux: "Konflux releases",
 	"art-builds": "ART builds",
 	"art-history": "ART build history",
