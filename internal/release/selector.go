@@ -73,9 +73,6 @@ func (s *Selector) ShipmentVersions(ctx context.Context) ([]string, error) {
 // keeping mixed and unknown streams in the foreground. JIRA release flags alone
 // remain useful when the catalog is disabled or unavailable.
 func (s *Selector) IngestionActivity(ctx context.Context) (map[string]bool, error) {
-	if err := s.shipped.WaitForInitial(ctx); err != nil {
-		return nil, err
-	}
 	versions, err := s.db.ListAllReleaseVersions(ctx)
 	if err != nil {
 		return nil, err

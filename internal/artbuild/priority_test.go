@@ -2,6 +2,7 @@ package artbuild
 
 import (
 	"context"
+	"fmt"
 	"github.com/quay/release-readiness/internal/syncstatus"
 	"net/url"
 	"slices"
@@ -11,8 +12,8 @@ import (
 
 func TestARTForegroundPrecedesBoundedHistoricalWork(t *testing.T) {
 	f := &fakeART{}
-	h, store := syncWith(t, f)
-	store.apps = []string{"fbc-quay-3-17", "fbc-quay-3-16", "quay-5-0"}
+	h, _ := syncWith(t, f)
+	h.Groups = []string{"quay-3.17", "quay-3.16", "quay-5.0"}
 	h.Activity = func(context.Context) (map[string]bool, error) {
 		return map[string]bool{"quay-3-17": false, "quay-3-16": true, "quay-5-0": true}, nil
 	}
@@ -96,6 +97,61 @@ func TestARTBudgetPauseIsNotSourceFailure(t *testing.T) {
 	for _, source := range status.Sources() {
 		if source.Source == "art-backfill" && source.LastSuccess != nil {
 			t.Fatal("incomplete backfill reported complete")
+		}
+	}
+}
+
+func TestARTConfiguredGroupsWithoutSnapshotsOrPrioritySource(t *testing.T) {
+	f := &fakeART{}
+	h, store := syncWith(t, f)
+	store.apps = []string{}
+	h.Groups = []string{"quay-3.18"}
+	h.Activity = func(context.Context) (map[string]bool, error) {
+		return nil, fmt.Errorf("priority database unavailable")
+	}
+	h.SyncOnce(t.Context())
+	if len(f.searches) != refreshDays {
+		t.Fatalf("configured ART collection was blocked: %d requests", len(f.searches))
+	}
+	for _, q := range f.searches {
+		if q.Get("group") != "quay-3.18" {
+			t.Fatalf("queried unexpected group: %v", q)
+		}
+	}
+}
+
+func TestARTMissingGroupsDoesNotReportSuccess(t *testing.T) {
+	for _, prioritized := range []bool{false, true} {
+		t.Run(fmt.Sprint(prioritized), func(t *testing.T) {
+			f := &fakeART{}
+			h, _ := syncWith(t, f)
+			h.Groups = nil
+			if prioritized {
+				h.Activity = func(context.Context) (map[string]bool, error) { return nil, nil }
+			}
+			status := syncstatus.New()
+			h.Status = status.Track("art-history", time.Minute)
+			h.SyncOnce(t.Context())
+			if len(f.searches) != 0 || len(status.Problems(time.Now())) != 1 {
+				t.Fatal("missing ART configuration not reported")
+			}
+			for _, source := range status.Sources() {
+				if source.LastSuccess != nil {
+					t.Fatal("no work reported success")
+				}
+			}
+		})
+	}
+}
+
+func TestParseARTGroups(t *testing.T) {
+	groups, err := ParseGroups("quay-5.0, quay-3.18,quay-5.0")
+	if err != nil || !slices.Equal(groups, []string{"quay-3.18", "quay-5.0"}) {
+		t.Fatalf("groups=%v err=%v", groups, err)
+	}
+	for _, value := range []string{"quay-3-18", "quay-3.18,", "../quay-3.18"} {
+		if _, err := ParseGroups(value); err == nil {
+			t.Fatalf("accepted %q", value)
 		}
 	}
 }

@@ -28,6 +28,8 @@ services:
       SIPPY_URL: ${RR_SIPPY_URL-https://sippy.dptools.openshift.org}
       # Local review must not write release changes to external systems.
       JIRA_WRITE: "false"
+      # Explicit ART inventory; independent of snapshots and JIRA availability.
+      ART_GROUPS: ${RR_ART_GROUPS:-quay-3.9,quay-3.10,quay-3.12,quay-3.14,quay-3.15,quay-3.16,quay-3.17,quay-3.18,quay-5.0}
     command: ["-addr", ":8080", "-db", "/data/release-readiness.db", "-prow-interval", "2m"]
     volumes:
       # Live kubeconfig from `oc login` (token expires ~24h; re-login on the
