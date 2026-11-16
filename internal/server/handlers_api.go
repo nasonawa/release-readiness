@@ -18,7 +18,7 @@ import (
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	// The JIRA sync is tracked only when the server was started with a token.
 	writeJSON(w, http.StatusOK, map[string]any{
-		"app_version":       "2.0.0-dev",
+		"app_version":       AppVersion,
 		"jira_base_url":     s.jiraBaseURL,
 		"jira_project":      s.jiraProject,
 		"jira_enabled":      s.syncStatus.Tracks("jira"),
