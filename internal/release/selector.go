@@ -86,7 +86,7 @@ func (s *Selector) IngestionActivity(ctx context.Context) (map[string]bool, erro
 		if v.KonfluxApplication == "" {
 			continue
 		}
-		active := !v.Archived && !v.Released && !(fresh && s.CatalogShipped(v.Name))
+		active := !v.Archived && !v.Released && (!fresh || !s.CatalogShipped(v.Name))
 		activity[v.KonfluxApplication] = activity[v.KonfluxApplication] || active
 	}
 	return activity, nil
@@ -101,7 +101,7 @@ func (s *Selector) CIWindowStart(ctx context.Context, app string) (time.Time, er
 	fresh := s.shipped.Fresh(time.Now())
 	var active []string
 	for _, v := range versions {
-		if v.KonfluxApplication == app && !v.Archived && !v.Released && !(fresh && s.CatalogShipped(v.Name)) {
+		if v.KonfluxApplication == app && !v.Archived && !v.Released && (!fresh || !s.CatalogShipped(v.Name)) {
 			active = append(active, v.Name)
 		}
 	}

@@ -32,6 +32,8 @@ const validation = {
 			mode: "Operator",
 			source_url: "https://github.com/openshift/release",
 			state: "missing",
+			evidence: "The latest observed run tested a different FBC; no verified match was found.",
+			run_url: "https://prow.example/run/other",
 		},
 	],
 };
@@ -152,6 +154,8 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 		.getByRole("combobox", { name: "Architecture", exact: true })
 		.selectOption("arm64");
 	await expect(page.getByText("GCP / GCS")).toBeVisible();
+	await expect(page.getByText("The latest observed run tested a different FBC; no verified match was found.")).toBeVisible();
+	await expect(page.getByRole("link",{name:"Open observed run ↗"})).toHaveAttribute("href","https://prow.example/run/other");
 	await expect(page.getByText("AWS / S3")).toHaveCount(0);
 	await page.getByRole("tab", { name: "JIRA issues", exact: true }).click();
 	await expect(

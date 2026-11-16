@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
@@ -103,6 +104,19 @@ func TestIngestionPriorityUsesFreshPublicationAndMixedStreams(t *testing.T) {
 	}
 	if !shipped.Fresh(time.Now()) || shipped.Fresh(time.Now().Add(4*time.Hour)) {
 		t.Fatal("publication freshness not bounded")
+	}
+	// The published z-stream must not widen the upcoming candidate window.
+	for _, b := range []artbuild.HistoryBuild{
+		{RecordID: "old", Group: "quay-3.16", Type: artbuild.TypeFBC, NVR: "quay-operator-fbc-3.16.7-20261101000000.ocp4.21", StartTime: "2026-11-01T00:00:00Z"},
+		{RecordID: "new", Group: "quay-3.16", Type: artbuild.TypeFBC, NVR: "quay-operator-fbc-3.16.8-20261115000000.ocp4.21", StartTime: "2026-11-15T00:00:00Z"},
+	} {
+		if err := database.UpsertArtHistoryBuild(t.Context(), b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start, err := s.CIWindowStart(t.Context(), "quay-3-16")
+	if err != nil || start.Format(time.RFC3339) != "2026-11-15T00:00:00Z" {
+		t.Fatalf("published release widened CI window: %v %v", start, err)
 	}
 	failing.Store(true)
 	shipped.Refresh(t.Context())

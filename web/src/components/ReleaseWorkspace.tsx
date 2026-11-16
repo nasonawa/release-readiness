@@ -404,7 +404,9 @@ function ValidationWorkbench({
 							<tr key={row.job}>
 								<td>
 									<a href={row.source_url} target="_blank" rel="noreferrer">
-										{row.cloud} / {row.storage} ↗
+										{[row.cloud, row.storage].filter(Boolean).join(" / ") ||
+											"Job configuration"}{" "}
+										↗
 									</a>
 									<p className="rr-muted">{row.mode}</p>
 								</td>
@@ -428,11 +430,14 @@ function ValidationWorkbench({
 								<td>
 									{row.run_url ? (
 										<a href={row.run_url} target="_blank" rel="noreferrer">
-											Open Prow run ↗
+											{row.state === "missing"
+												? "Open observed run ↗"
+												: "Open Prow run ↗"}
 										</a>
 									) : (
 										"No verified candidate run"
 									)}
+									{row.evidence && <p className="rr-muted">{row.evidence}</p>}
 									<details>
 										<summary>Job name</summary>
 										<code>{row.job}</code>

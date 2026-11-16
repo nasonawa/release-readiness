@@ -38,7 +38,8 @@ export function useSyncStatus() {
 const AFFECTS: Record<string, string> = {
 	konflux: "snapshots, releases, stage/prod status",
 	"art-builds": "builds",
-	"art-history": "builds",
+	"art-history": "Current-release builds",
+	"art-backfill": "Historical ART builds",
 	"fbc-render": "FBC bundles",
 	catalog: "shipped versions",
 	jira: "tickets",

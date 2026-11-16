@@ -73,7 +73,7 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/search":
 		f.searches = append(f.searches, q)
 		if f.failDate != "" && q.Get("dateRange") == f.failDate {
-			http.Error(w, "history unavailable", 503)
+			http.Error(w, "history unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if f.failNVR != "" && q.Get("nvr") == f.failNVR {

@@ -43,6 +43,11 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 	}
 	slices.Sort(active)
 	slices.Sort(historical)
+	if len(active) > 0 {
+		offset := h.foregroundCursor % len(active)
+		h.foregroundCursor++
+		active = append(slices.Clone(active[offset:]), active[:offset]...)
+	}
 	h.logger.Info("ART scheduling", "foreground", active, "historical", historical)
 	budget := h.ForegroundBudget
 	if budget <= 0 {
@@ -74,6 +79,7 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 		return
 	}
 	groups := append(slices.Clone(active), historical...)
+	slices.Sort(groups)
 	if len(groups) == 0 {
 		return
 	}
