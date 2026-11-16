@@ -19,7 +19,7 @@ type SippyStore interface {
 	ListProwRunsByApplication(context.Context, string) ([]Run, error)
 	UpsertProwRuns(context.Context, []*Run) error
 	// CandidateWindowStart is the earliest known ART FBC build start of an
-	// active release in this stream. Zero requests the retention fallback.
+	// eligible release in this stream. Zero means no CI lookup is scheduled.
 	CandidateWindowStart(context.Context, string) (time.Time, error)
 }
 
@@ -45,6 +45,7 @@ type SippySync struct {
 	HistoryStatus                  *syncstatus.Source
 	lastHistory                    time.Time
 	historyCursor                  int
+	idle                           bool
 	now                            func() time.Time
 }
 
@@ -59,7 +60,11 @@ func (s *SippySync) Run(ctx context.Context, interval time.Duration) {
 	for {
 		pass, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		err := s.SyncOnce(pass)
-		s.Status.Report(err)
+		if err == nil && s.idle {
+			s.Status.Idle("No current release with a dated FBC and configured jobs")
+		} else {
+			s.Status.Report(err)
+		}
 		if err != nil {
 			slog.Warn("Prow foreground sync failed", "error", err)
 		}
@@ -75,6 +80,7 @@ func (s *SippySync) Run(ctx context.Context, interval time.Duration) {
 }
 
 func (s *SippySync) SyncOnce(ctx context.Context) error {
+	s.idle = false
 	definitions, revision, err := s.Store.JobInventory(ctx)
 	if err != nil {
 		return err
@@ -96,8 +102,25 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	windowFn := s.WindowStart
+	if windowFn == nil {
+		windowFn = s.Store.CandidateWindowStart
+	}
+	windows := map[string]time.Time{}
 	var active, unknown, historical []string
 	for app := range groups {
+		start, err := windowFn(ctx, app)
+		if err != nil {
+			return err
+		}
+		if start.IsZero() {
+			slog.Info("Prow lookup deferred", "application", app, "reason", "no release with a dated FBC")
+			continue
+		}
+		if start.After(s.clock()) {
+			return fmt.Errorf("FBC build start for %s is in the future", app)
+		}
+		windows[app] = start
 		if isActive, known := activity[app]; !known {
 			unknown = append(unknown, app)
 		} else if isActive {
@@ -110,15 +133,16 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 	sort.Strings(historical)
 	sort.Strings(unknown)
 	active = append(active, unknown...)
+	s.idle = len(active) == 0
 	slog.Info("Prow scheduling", "foreground", active, "historical", historical)
 	var pass syncstatus.Pass
 	for _, app := range active {
 		if ctx.Err() != nil {
 			return errors.Join(pass.Err(), ctx.Err())
 		}
-		pass.Add(s.syncStream(ctx, app, groups[app]))
+		pass.Add(s.syncStream(ctx, app, groups[app], windows[app]))
 	}
-	if s.LegacyInterval > 0 && (s.lastLegacy.IsZero() || s.clock().Sub(s.lastLegacy) >= s.LegacyInterval) {
+	if len(active) > 0 && s.LegacyInterval > 0 && (s.lastLegacy.IsZero() || s.clock().Sub(s.lastLegacy) >= s.LegacyInterval) {
 		var liveJobs []JobDefinition
 		for _, app := range active {
 			liveJobs = append(liveJobs, groups[app]...)
@@ -126,7 +150,7 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 		started := time.Now()
 		fetched := 0
 		pass.Add(workpool.Run(ctx, liveJobs, s.Workers, func(ctx context.Context, d JobDefinition) (int, error) {
-			return s.Artifacts.syncJob(ctx, d.Job())
+			return s.Artifacts.syncJobWindow(ctx, d.Job(), maxWindowStart(s.clock(), s.Retention, windows[d.Application], s.Lookback), s.clock())
 		}, func(_ JobDefinition, n int) error { fetched += n; return nil }))
 		slog.Info("Prow live discovery", "jobs", len(liveJobs), "fetched", fetched, "duration_ms", time.Since(started).Milliseconds())
 		s.lastLegacy = s.clock()
@@ -148,7 +172,7 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 		budget = 30 * time.Second
 	}
 	historyCtx, cancel := context.WithTimeout(ctx, budget)
-	err = s.syncStream(historyCtx, app, groups[app])
+	err = s.syncStream(historyCtx, app, groups[app], windows[app])
 	cancel()
 	s.lastHistory = s.clock()
 	s.HistoryStatus.Report(err)
@@ -158,7 +182,7 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 	return nil
 }
 
-func (s *SippySync) syncStream(ctx context.Context, app string, definitions []JobDefinition) (err error) {
+func (s *SippySync) syncStream(ctx context.Context, app string, definitions []JobDefinition, start time.Time) (err error) {
 	started := time.Now()
 	metrics := &requestMetrics{}
 	ctx = context.WithValue(ctx, requestMetricsKey{}, metrics)
@@ -173,25 +197,7 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		return fmt.Errorf("unsupported Sippy application %q", app)
 	}
 	now := s.clock()
-	retention := s.Retention
-	if retention <= 0 || retention > 90*24*time.Hour {
-		retention = 90 * 24 * time.Hour
-	}
-	from := now.Add(-retention)
-	windowFn := s.WindowStart
-	if windowFn == nil {
-		windowFn = s.Store.CandidateWindowStart
-	}
-	start, err := windowFn(ctx, app)
-	if err != nil {
-		return err
-	}
-	if !start.IsZero() {
-		candidateFrom := start.Add(-s.Lookback)
-		if candidateFrom.After(from) && !candidateFrom.After(now) {
-			from = candidateFrom
-		}
-	}
+	from := maxWindowStart(now, s.Retention, start, s.Lookback)
 	known, err := s.Store.ListProwRunsByApplication(ctx, app)
 	if err != nil {
 		return err
@@ -287,4 +293,17 @@ func evidenceRetryDelay(r Run, now time.Time) time.Duration {
 		return 24 * time.Hour
 	}
 	return 6 * time.Hour
+}
+
+// All z-stream candidates share one stream query, bounded by the earliest
+// eligible FBC and retention. The artifact still decides exact identity.
+func maxWindowStart(now time.Time, retention time.Duration, start time.Time, lookback time.Duration) time.Time {
+	if retention <= 0 || retention > 90*24*time.Hour {
+		retention = 90 * 24 * time.Hour
+	}
+	from := now.Add(-retention)
+	if candidateFrom := start.Add(-lookback); candidateFrom.After(from) {
+		from = candidateFrom
+	}
+	return from
 }

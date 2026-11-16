@@ -302,6 +302,8 @@ func main() {
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)
 		syncer.Retention = *retention
+		syncer.WindowStart = selector.CIWindowStart
+		syncer.Lookback = *ciLookback
 		syncer.Pattern = prowPattern
 		if *jobDiscovery {
 			syncer.Inventory = database

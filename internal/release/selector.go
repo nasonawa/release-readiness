@@ -89,18 +89,28 @@ func (s *Selector) IngestionActivity(ctx context.Context) (map[string]bool, erro
 	return activity, nil
 }
 
-// CIWindowStart excludes already published z-streams from candidate windows.
+// CIWindowStart joins known releases to dated ART FBCs. Upcoming releases
+// exclude published z-streams; historical-only streams are eligible for paced backfill.
+// Zero means no matched dated FBC, so the scheduler must not query CI.
 func (s *Selector) CIWindowStart(ctx context.Context, app string) (time.Time, error) {
 	versions, err := s.db.ListAllReleaseVersions(ctx)
 	if err != nil {
 		return time.Time{}, err
 	}
 	fresh := s.shipped.Fresh(time.Now())
-	var active []string
+	var active, historical []string
 	for _, v := range versions {
-		if v.KonfluxApplication == app && !v.Archived && !v.Released && (!fresh || !s.CatalogShipped(v.Name)) {
-			active = append(active, v.Name)
+		if v.KonfluxApplication != app {
+			continue
 		}
+		if !v.Archived && !v.Released && (!fresh || !s.CatalogShipped(v.Name)) {
+			active = append(active, v.Name)
+		} else {
+			historical = append(historical, v.Name)
+		}
+	}
+	if len(active) == 0 {
+		active = historical
 	}
 	return s.db.CandidateWindowStartForVersions(ctx, app, active)
 }

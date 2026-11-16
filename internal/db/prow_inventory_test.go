@@ -43,7 +43,7 @@ func TestProwInventoryRevisionRetention(t *testing.T) {
 	}
 }
 
-func TestCandidateWindowUsesARTAndBroadensForUnknownRelease(t *testing.T) {
+func TestCandidateWindowUsesARTAndDefersUnknownRelease(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "window.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -64,8 +64,8 @@ func TestCandidateWindowUsesARTAndBroadensForUnknownRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err = d.CandidateWindowStart(t.Context(), "quay-3-16")
-	if err != nil || !got.IsZero() {
-		t.Fatalf("unknown candidate narrowed window=%v err=%v", got, err)
+	if err != nil || !got.Equal(at) {
+		t.Fatalf("unknown candidate changed known candidate window=%v err=%v", got, err)
 	}
 }
 
@@ -91,5 +91,29 @@ func TestProwApplicationActivity(t *testing.T) {
 	}
 	if len(activity) != 2 || !activity["quay-3-16"] || activity["quay-3-10"] {
 		t.Fatalf("wrong lifecycle priorities: %v", activity)
+	}
+}
+
+func TestCandidateWindowAcceptsARTUTCWithoutZone(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "art-time.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	for _, b := range []artbuild.HistoryBuild{
+		{RecordID: "valid", Group: "quay-3.18", Type: artbuild.TypeFBC, NVR: "quay-operator-fbc-3.18.3-20261115120000.ocp4.21", StartTime: "2026-11-15T12:00:00"},
+		{RecordID: "old", Group: "quay-3.18", Type: artbuild.TypeFBC, NVR: "quay-operator-fbc-3.18.2-20261101000000.ocp4.21", StartTime: "2026-11-01T00:00:00Z"},
+	} {
+		if err := d.UpsertArtHistoryBuild(t.Context(), b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := d.CandidateWindowStartForVersions(t.Context(), "quay-3-18", []string{"quay-v3.18.3", "quay-v3.18.4"})
+	if err != nil || got.Format(time.RFC3339) != "2026-11-15T12:00:00Z" {
+		t.Fatalf("date=%v err=%v", got, err)
+	}
+	got, err = d.CandidateWindowStartForVersions(t.Context(), "quay-3-18", []string{"quay-v3.18.4"})
+	if err != nil || !got.IsZero() {
+		t.Fatalf("version without FBC scheduled lookup: %v %v", got, err)
 	}
 }

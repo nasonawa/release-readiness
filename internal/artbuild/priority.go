@@ -66,6 +66,7 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 		h.Status.Report(pass.Err())
 		h.logger.Info("ART foreground synced", "duration_ms", time.Since(started).Milliseconds(), "days_scanned", scanned, "failed", pass.Err() != nil)
 	} else {
+		h.Status.Idle("Only historical ART groups are configured")
 		h.logger.Info("ART foreground idle", "reason", "only historical streams discovered")
 	}
 	if pass.Err() != nil || ctx.Err() != nil {
