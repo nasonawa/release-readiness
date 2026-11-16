@@ -76,3 +76,26 @@ func TestARTForegroundTimeoutIsNotSuccess(t *testing.T) {
 		t.Fatal("timeout reported success or ran history")
 	}
 }
+
+func TestARTBudgetPauseIsNotSourceFailure(t *testing.T) {
+	f := &fakeART{slowDate: "2026-10-09 to 2026-10-09"}
+	h, store := syncWith(t, f)
+	h.Activity = func(context.Context) (map[string]bool, error) { return nil, nil }
+	h.BackfillInterval = time.Hour
+	h.BackfillBudget = 20 * time.Millisecond
+	status := syncstatus.New()
+	h.Status = status.Track("art-history", time.Minute)
+	h.BackfillStatus = status.Track("art-backfill", 0)
+	h.SyncOnce(t.Context())
+	if p := status.Problems(time.Now()); len(p) != 0 {
+		t.Fatalf("intentional pause marked unhealthy: %+v", p)
+	}
+	if slices.Contains(store.scanned, "quay-3.17 fbc 2026-10-09") {
+		t.Fatal("partial day was marked complete")
+	}
+	for _, source := range status.Sources() {
+		if source.Source == "art-backfill" && source.LastSuccess != nil {
+			t.Fatal("incomplete backfill reported complete")
+		}
+	}
+}

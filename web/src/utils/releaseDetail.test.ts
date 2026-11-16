@@ -563,9 +563,16 @@ test("checking: nothing warns or fails", () => {
 	assert.deepEqual(
 		readingLine({ read: 87, failed: 2, pending: 0, history_days: 12 }),
 		{
-			status: "running",
-			text: "Reading build history, 12 days left · 2 unreadable",
+			status: "warning",
+			text: "2/89 FBCs unreadable",
 		},
+	);
+});
+
+test("history alone does not keep current FBC reading active", () => {
+	assert.equal(
+		readingLine({ read: 10, failed: 0, pending: 0, history_days: 111 }),
+		null,
 	);
 });
 

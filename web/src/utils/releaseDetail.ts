@@ -527,18 +527,10 @@ export function verdictLine(v: Verdict): StatusLine {
 	}
 }
 
-/**
- * How far the render sync has read FBC images and the backfill ART build
- * history, null with nothing pending or failed: in progress while either is,
- * a warning for failed reads only once neither is.
- */
+/** Current FBC reads only; historical backfill is separate non-blocking text. */
 export function readingLine(r: ReadProgress): StatusLine | null {
 	const total = r.read + r.failed + r.pending;
-	const reading = [
-		r.pending > 0 && `FBCs ${r.read}/${total}`,
-		r.history_days > 0 &&
-			`build history, ${r.history_days} day${r.history_days === 1 ? "" : "s"} left`,
-	].filter(Boolean);
+	const reading = [r.pending > 0 && `FBCs ${r.read}/${total}`].filter(Boolean);
 	if (reading.length === 0)
 		return r.failed
 			? {

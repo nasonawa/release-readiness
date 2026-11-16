@@ -392,6 +392,11 @@ function Freshness({ data }: { data?: ReleaseCandidate }) {
 			}}
 		>
 			{read && <Status status={read.status}>{read.text}</Status>}
+			{data && data.reading.history_days > 0 && (
+				<span>
+					Background history: {data.reading.history_days} days pending
+				</span>
+			)}
 			{prodLine && prodLine.status !== "done" && (
 				<span title={prod.name}>
 					<Status status={prodLine.status}>Prod: {prodLine.text}</Status>

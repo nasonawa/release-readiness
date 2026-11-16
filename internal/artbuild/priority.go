@@ -98,8 +98,13 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 		h.backfillSources(backfill, &sources)
 		err = errors.Join(sources.Err(), backfill.Err())
 	}
+	budgetExhausted := errors.Is(backfill.Err(), context.DeadlineExceeded) && ctx.Err() == nil
 	stop()
 	h.lastBackfill = h.now()
+	if budgetExhausted {
+		h.logger.Info("ART backfill paused", "group", group, "duration_ms", time.Since(started).Milliseconds(), "reason", "time budget exhausted")
+		return
+	}
 	h.BackfillStatus.Report(err)
 	h.logger.Info("ART backfill synced", "group", group, "duration_ms", time.Since(started).Milliseconds(), "failed", err != nil)
 	if err != nil {

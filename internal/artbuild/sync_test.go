@@ -45,6 +45,7 @@ type fakeART struct {
 	// failNVR is an NVR whose /search fails.
 	failNVR  string
 	failDate string
+	slowDate string
 }
 
 func pullspec(nvr string) string {
@@ -72,6 +73,10 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/search":
 		f.searches = append(f.searches, q)
+		if f.slowDate != "" && q.Get("dateRange") == f.slowDate {
+			<-r.Context().Done()
+			return
+		}
 		if f.failDate != "" && q.Get("dateRange") == f.failDate {
 			http.Error(w, "history unavailable", http.StatusServiceUnavailable)
 			return
