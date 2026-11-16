@@ -421,10 +421,14 @@ function ValidationWorkbench({
 												? "green"
 												: row.state === "failed"
 													? "red"
-													: "grey"
+													: row.state === "running"
+														? "blue"
+														: "grey"
 										}
 									>
-										{row.state === "missing" ? "Awaiting evidence" : row.state}
+										{row.state === "missing"
+											? "Awaiting evidence"
+											: row.state.charAt(0).toUpperCase() + row.state.slice(1)}
 									</Label>
 								</td>
 								<td>
@@ -437,9 +441,9 @@ function ValidationWorkbench({
 									) : (
 										"No verified candidate run"
 									)}
-									{row.evidence && <p className="rr-muted">{row.evidence}</p>}
 									<details>
-										<summary>Job name</summary>
+										<summary>Details</summary>
+										{row.evidence && <p className="rr-muted">{row.evidence}</p>}
 										<code>{row.job}</code>
 									</details>
 								</td>

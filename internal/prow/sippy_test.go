@@ -330,3 +330,44 @@ func TestEvidenceRetryDelays(t *testing.T) {
 		}
 	}
 }
+
+func TestActiveRunReadsFBCBeforeCompletion(t *testing.T) {
+	for _, indexed := range []bool{false, true} {
+		for _, artifactPresent := range []bool{false, true} {
+			jobs := experimentInventory(t)[:1]
+			s, a, _ := productionSippy(t, jobs)
+			row := a.rows[jobs[0].Release][0]
+			dir := jobs[0].prowJob().Prefix + row.ID + "/"
+			delete(a.objects, dir+"finished.json")
+			var pj map[string]any
+			if err := json.Unmarshal(a.objects[dir+"prowjob.json"], &pj); err != nil {
+				t.Fatal(err)
+			}
+			pj["status"].(map[string]any)["state"] = "pending"
+			a.objects[dir+"prowjob.json"] = experimentJSON(t, pj)
+			if !artifactPresent {
+				delete(a.objects, dir+"artifacts/"+jobs[0].Target+"/quay-gather/artifacts/tested-images.json")
+			}
+			var run *Run
+			var err error
+			if indexed {
+				run, err = s.Artifacts.fetchIndexedRun(t.Context(), s.Store.(*sippyMemory).definitions[0], IndexedRun{ID: row.ID, Job: row.Job, URL: row.URL, Timestamp: row.Timestamp, Result: "R"})
+			} else {
+				run, err = s.Artifacts.fetchRun(t.Context(), jobs[0].prowJob(), row.ID)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if run == nil || run.State != "pending" || run.CompletedAt != nil {
+				t.Fatalf("active state lost: %+v", run)
+			}
+			if (digest(run.CatalogRef) != "") != artifactPresent {
+				t.Fatalf("wrong identity: %+v", run)
+			}
+			counts := experimentCategories(a.takeCounts())
+			if counts["tested-images"] != 1 || counts["install"] != 0 || counts["csv"] != 0 {
+				t.Fatalf("active reads: %v", counts)
+			}
+		}
+	}
+}

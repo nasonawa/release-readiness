@@ -98,7 +98,7 @@ func main() {
 	jiraWorkers := flag.Int("jira-workers", 2, "maximum concurrent JIRA release issue fetches")
 	artWorkers := flag.Int("art-workers", 2, "maximum concurrent ART component resolutions")
 	ciLookback := flag.Duration("ci-candidate-lookback", 24*time.Hour, "lookback before an ART FBC build for CI runs that started earlier")
-	legacyInterval := flag.Duration("prow-live-refresh-interval", time.Hour, "GCS discovery interval for queued/running jobs absent from Sippy; 0 disables")
+	legacyInterval := flag.Duration("prow-live-refresh-interval", 2*time.Minute, "GCS discovery interval for queued/running jobs absent from Sippy; 0 disables")
 	historyInterval := flag.Duration("prow-history-interval", time.Hour, "best-effort historical CI interval; one stream per pass, 0 disables")
 	historyBudget := flag.Duration("prow-history-budget", 30*time.Second, "maximum time per historical CI pass after unreleased streams")
 	artCurrentBudget := flag.Duration("art-current-budget", 2*time.Minute, "time budget for current-release ART history per pass")

@@ -154,6 +154,8 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 		.getByRole("combobox", { name: "Architecture", exact: true })
 		.selectOption("arm64");
 	await expect(page.getByText("GCP / GCS")).toBeVisible();
+	await expect(page.getByText("The latest observed run tested a different FBC; no verified match was found.")).not.toBeVisible();
+	await page.locator(".rr-validation-table summary").click();
 	await expect(page.getByText("The latest observed run tested a different FBC; no verified match was found.")).toBeVisible();
 	await expect(page.getByRole("link",{name:"Open observed run ↗"})).toHaveAttribute("href","https://prow.example/run/other");
 	await expect(page.getByText("AWS / S3")).toHaveCount(0);
@@ -310,4 +312,20 @@ test("long source-status popover stays within the viewport", async ({
 		await page.keyboard.press("Escape");
 		await expect(popup).not.toBeVisible();
 	}
+});
+
+test("confirmed active CI is Running with compact evidence details", async ({ page }) => {
+	await page.route("**/api/v1/releases/*/validation", (route) => route.fulfill({ json: {
+		...validation, passed: 0, running: 1, missing: 0, total: 1,
+		rows: [{ ...validation.rows[0], state: "running", evidence: "The selected-FBC run is still in progress." }],
+	} }));
+	await page.goto("/");
+	await page.getByRole("heading", { name: "Quay 3.18", exact: true }).getByRole("link").click();
+	await page.getByRole("tab", { name: "Validation workbench", exact: true }).click();
+	const table = page.locator(".rr-validation-table");
+	await expect(table.getByText("Running", { exact: true })).toBeVisible();
+	await expect(table.getByText("Awaiting evidence", { exact: true })).toHaveCount(0);
+	await expect(table.getByText("The selected-FBC run is still in progress.")).not.toBeVisible();
+	await table.locator("summary").click();
+	await expect(table.getByText("The selected-FBC run is still in progress.")).toBeVisible();
 });

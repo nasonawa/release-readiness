@@ -94,3 +94,27 @@ func TestValidationExplainsMissingEvidenceWithoutPassing(t *testing.T) {
 		})
 	}
 }
+
+func TestValidationRunningRequiresExactFBCAndUsesNewestRun(t *testing.T) {
+	plan := ValidationPlan{Revision: "periodics:rev", Jobs: []model.ValidationRow{{Job: "a"}}}
+	candidate := &model.ReleaseCandidate{Verdict: model.Verdict{State: "ready"}, FBCCandidate: &model.FBCCandidate{Operators: []model.OperatorFBC{{Members: []model.FBCMember{{CI: &model.FBCCI{Exact: []model.CIJob{{JobName: "a", Runs: []model.CIRun{{ProwURL: "done"}, {ProwURL: "new"}, {ProwURL: "old"}}}}}}}}}}}
+	at := time.Now().UTC()
+	older, newer := at.Add(-time.Hour), at.Add(time.Hour)
+	runs := []prow.Run{{JobName: "a", State: "running", StartedAt: &newer, ProwURL: "new"}, {JobName: "a", State: "pending", StartedAt: &older, ProwURL: "old"}}
+	v := EvaluateValidation(plan, candidate, runs, true)
+	if v.Running != 1 || v.Missing != 0 || v.Ready || v.Rows[0].RunURL != "new" {
+		t.Fatalf("active exact run: %+v", v)
+	}
+	runs = append(runs, prow.Run{JobName: "a", State: "success", CompletedAt: &at, ProwURL: "done"})
+	if v = EvaluateValidation(plan, candidate, runs, true); v.Running != 1 || v.Ready {
+		t.Fatalf("new rerun hidden by old success: %+v", v)
+	}
+	runs = runs[1:]
+	if v = EvaluateValidation(plan, candidate, runs, true); v.Passed != 1 {
+		t.Fatalf("old active run hid later success: %+v", v)
+	}
+	runs = []prow.Run{{JobName: "a", State: "running", StartedAt: &newer, ProwURL: "unverified"}}
+	if v = EvaluateValidation(plan, candidate, runs, true); v.Missing != 1 || v.Running != 0 {
+		t.Fatalf("unverified run counted: %+v", v)
+	}
+}

@@ -56,7 +56,6 @@ func (s *SippySync) clock() time.Time {
 }
 
 func (s *SippySync) Run(ctx context.Context, interval time.Duration) {
-	s.lastLegacy = s.clock()
 	for {
 		pass, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		err := s.SyncOnce(pass)
@@ -120,15 +119,16 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 		pass.Add(s.syncStream(ctx, app, groups[app]))
 	}
 	if s.LegacyInterval > 0 && (s.lastLegacy.IsZero() || s.clock().Sub(s.lastLegacy) >= s.LegacyInterval) {
+		var liveJobs []JobDefinition
 		for _, app := range active {
-			for _, d := range groups[app] {
-				if ctx.Err() != nil {
-					return errors.Join(pass.Err(), ctx.Err())
-				}
-				_, err := s.Artifacts.syncJob(ctx, d.Job())
-				pass.Add(err)
-			}
+			liveJobs = append(liveJobs, groups[app]...)
 		}
+		started := time.Now()
+		fetched := 0
+		pass.Add(workpool.Run(ctx, liveJobs, s.Workers, func(ctx context.Context, d JobDefinition) (int, error) {
+			return s.Artifacts.syncJob(ctx, d.Job())
+		}, func(_ JobDefinition, n int) error { fetched += n; return nil }))
+		slog.Info("Prow live discovery", "jobs", len(liveJobs), "fetched", fetched, "duration_ms", time.Since(started).Milliseconds())
 		s.lastLegacy = s.clock()
 	}
 	// Do not spend time on history while current releases need a retry.

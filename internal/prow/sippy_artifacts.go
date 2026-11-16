@@ -16,6 +16,11 @@ func (s *Syncer) fetchIndexedRun(ctx context.Context, job JobDefinition, row Ind
 		return run, nil
 	}
 	if row.Result == "R" {
+		// Read the live Prow state and identity even before completion.
+		live, err := s.fetchRun(ctx, job.Job(), row.ID)
+		if live != nil || err != nil {
+			return live, err
+		}
 		run.State = "running"
 		return run, nil
 	}
