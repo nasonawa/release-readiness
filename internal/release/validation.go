@@ -147,7 +147,10 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 				completedByJob[r.JobName] = r
 			}
 		} else if r.State == "pending" || r.State == "running" || r.State == "triggered" {
-			runningByJob[r.JobName] = r
+			old := runningByJob[r.JobName]
+			if old == nil || (r.StartedAt != nil && (old.StartedAt == nil || r.StartedAt.After(*old.StartedAt))) {
+				runningByJob[r.JobName] = r
+			}
 		}
 	}
 	for _, spec := range plan.Jobs {
@@ -163,7 +166,12 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 			completed, running = nil, nil
 			row.Evidence = "This job is no longer configured."
 		}
-		if completed != nil {
+		// A newly started, exact-FBC rerun is the current validation state.
+		// Do not let an older still-running execution hide a later result.
+		if running != nil && (completed == nil || (running.StartedAt != nil && running.StartedAt.After(*completed.CompletedAt))) {
+			row.State, row.RunURL = "running", running.ProwURL
+			row.Evidence = "The selected-FBC run is still in progress."
+		} else if completed != nil {
 			row.RunURL = completed.ProwURL
 			if completed.State == "success" && !completed.InstallFailed {
 				row.State = "passed"
@@ -172,9 +180,6 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 				row.State = "failed"
 				row.Evidence = "The latest completed run against the selected FBC failed."
 			}
-		} else if running != nil {
-			row.State, row.RunURL = "running", running.ProwURL
-			row.Evidence = "The selected-FBC run is still in progress."
 		}
 		switch row.State {
 		case "passed":

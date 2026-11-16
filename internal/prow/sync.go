@@ -308,12 +308,12 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 		return nil, nil
 	}
 	run.FetchedAt = time.Now().UTC()
-	if run.CompletedAt == nil {
-		return run, nil
-	}
 	run.ArtifactState = ArtifactNone
 	if target == "" {
 		return run, nil
+	}
+	if !artifactTarget.MatchString(target) {
+		return nil, fmt.Errorf("invalid artifact target")
 	}
 	artifacts := dir + "artifacts/" + target + "/quay-gather/artifacts/"
 	data, err := s.client.object(ctx, artifacts+"tested-images.json")
@@ -321,12 +321,15 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 		return nil, err
 	}
 	if data != nil {
-		if run.applyArtifact(data) && run.State != "success" {
+		if run.applyArtifact(data) && run.CompletedAt != nil && run.State != "success" {
 			if run.InstallFailed, err = s.installFailed(ctx, job, id, target); err != nil {
 				return nil, err
 			}
 		}
 		return run, nil
+	}
+	if run.CompletedAt == nil {
+		return run, nil // active runs only need the exact identity artifact
 	}
 	if data, err = s.client.object(ctx, artifacts+"olm-csvs.yaml"); err != nil {
 		return nil, err

@@ -277,7 +277,7 @@ func TestSync(t *testing.T) {
 		periodicRun: {"failure", ArtifactPresent, 12},
 		olmRun:      {"success", ArtifactOLMCSVs, 5},
 		noneRun:     {"failure", ArtifactNone, 0},
-		pendingRun:  {"pending", ArtifactMissing, 0},
+		pendingRun:  {"pending", ArtifactNone, 0},
 	}
 	if len(store.runs) != len(want) {
 		t.Fatalf("runs = %d, want %d", len(store.runs), len(want))
@@ -307,8 +307,8 @@ func TestSync(t *testing.T) {
 	if p := reg.Problems(time.Now()); len(p) != 1 || !strings.Contains(p[0].Message, olmCSVs) {
 		t.Errorf("problems after a failed olm-csvs.yaml read = %+v", p)
 	}
-	if r := store.runs[pendingRun]; r.ArtifactState != ArtifactMissing {
-		t.Errorf("run after a failed olm-csvs.yaml read = %+v, want it missing", r)
+	if r := store.runs[pendingRun]; r.ArtifactState != ArtifactNone {
+		t.Errorf("run after a failed olm-csvs.yaml read = %+v, want its previous absent artifact state", r)
 	}
 
 	// Finished runs are not fetched again.

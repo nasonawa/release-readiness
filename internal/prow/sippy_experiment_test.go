@@ -447,6 +447,14 @@ func TestSippyExperimentEvidenceGaps(t *testing.T) {
 			case "running":
 				a.rows[jobs[0].Release][0].Result = "R"
 				a.rows[jobs[0].Release][0].Succeeded = false
+				delete(a.objects, dir+"finished.json")
+				delete(a.objects, artifactPath)
+				var pj map[string]any
+				if err := json.Unmarshal(a.objects[dir+"prowjob.json"], &pj); err != nil {
+					t.Fatal(err)
+				}
+				pj["status"].(map[string]any)["state"] = "pending"
+				a.objects[dir+"prowjob.json"] = experimentJSON(t, pj)
 			case "Sippy error":
 				a.fail["/api/jobs/runs"] = http.StatusServiceUnavailable
 				expectError = true
