@@ -1,5 +1,9 @@
 # Sippy/GCS mock experiment
 
+The application now has an opt-in production Sippy adapter. This experiment
+remains local-only and shares its artifact enrichment implementation; see the
+root README for runtime configuration and production integration tests.
+
 Run from the repository root:
 
 ```sh

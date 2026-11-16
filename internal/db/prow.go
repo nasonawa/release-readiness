@@ -11,43 +11,58 @@ import (
 // UpsertProwRun stores a run by (job_name, build_id) and replaces its images
 // and whether its install failed.
 func (d *DB) UpsertProwRun(ctx context.Context, r *prow.Run) error {
+	return d.UpsertProwRuns(ctx, []*prow.Run{r})
+}
+
+// UpsertProwRuns commits a small fetched batch without network calls in the transaction.
+func (d *DB) UpsertProwRuns(ctx context.Context, runs []*prow.Run) error {
 	return d.InTx(ctx, func(tx *DB) error {
-		q := tx.queries()
-		if err := q.UpsertProwRun(ctx, dbsqlc.UpsertProwRunParams{
-			JobName:       r.JobName,
-			BuildID:       r.BuildID,
-			Application:   r.Application,
-			State:         r.State,
-			StartedAt:     formatOptionalTime(r.StartedAt),
-			CompletedAt:   formatOptionalTime(r.CompletedAt),
-			ProwUrl:       r.ProwURL,
-			ArtifactState: r.ArtifactState,
-			CatalogRef:    r.CatalogRef,
-			FetchedAt:     r.FetchedAt.UTC().Format(time.RFC3339),
-		}); err != nil {
-			return err
-		}
-		if err := q.DeleteProwRunImages(ctx, dbsqlc.DeleteProwRunImagesParams{JobName: r.JobName, BuildID: r.BuildID}); err != nil {
-			return err
-		}
-		for _, img := range r.Images {
-			if err := q.InsertProwRunImage(ctx, dbsqlc.InsertProwRunImageParams{
-				JobName: r.JobName,
-				BuildID: r.BuildID,
-				Role:    img.Role,
-				Digest:  img.Digest,
-			}); err != nil {
+		for _, r := range runs {
+			if err := tx.upsertProwRun(ctx, r); err != nil {
 				return err
 			}
 		}
-		if err := q.DeleteProwInstallFailure(ctx, dbsqlc.DeleteProwInstallFailureParams{JobName: r.JobName, BuildID: r.BuildID}); err != nil {
+		return nil
+	})
+}
+
+func (d *DB) upsertProwRun(ctx context.Context, r *prow.Run) error {
+
+	q := d.queries()
+	if err := q.UpsertProwRun(ctx, dbsqlc.UpsertProwRunParams{
+		JobName:       r.JobName,
+		BuildID:       r.BuildID,
+		Application:   r.Application,
+		State:         r.State,
+		StartedAt:     formatOptionalTime(r.StartedAt),
+		CompletedAt:   formatOptionalTime(r.CompletedAt),
+		ProwUrl:       r.ProwURL,
+		ArtifactState: r.ArtifactState,
+		CatalogRef:    r.CatalogRef,
+		FetchedAt:     r.FetchedAt.UTC().Format(time.RFC3339),
+	}); err != nil {
+		return err
+	}
+	if err := q.DeleteProwRunImages(ctx, dbsqlc.DeleteProwRunImagesParams{JobName: r.JobName, BuildID: r.BuildID}); err != nil {
+		return err
+	}
+	for _, img := range r.Images {
+		if err := q.InsertProwRunImage(ctx, dbsqlc.InsertProwRunImageParams{
+			JobName: r.JobName,
+			BuildID: r.BuildID,
+			Role:    img.Role,
+			Digest:  img.Digest,
+		}); err != nil {
 			return err
 		}
-		if !r.InstallFailed {
-			return nil
-		}
-		return q.InsertProwInstallFailure(ctx, dbsqlc.InsertProwInstallFailureParams{JobName: r.JobName, BuildID: r.BuildID})
-	})
+	}
+	if err := q.DeleteProwInstallFailure(ctx, dbsqlc.DeleteProwInstallFailureParams{JobName: r.JobName, BuildID: r.BuildID}); err != nil {
+		return err
+	}
+	if !r.InstallFailed {
+		return nil
+	}
+	return q.InsertProwInstallFailure(ctx, dbsqlc.InsertProwInstallFailureParams{JobName: r.JobName, BuildID: r.BuildID})
 }
 
 func (d *DB) ListFinishedProwBuildIDs(ctx context.Context, jobName string) ([]string, error) {

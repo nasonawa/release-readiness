@@ -1,7 +1,7 @@
 package prow
 
-// This file deliberately stays test-only: the user requested a mocked API
-// comparison before changing the application's ingestion path.
+// Loopback mock infrastructure and request-count regression comparison.
+// Artifact enrichment now exercises the production Sippy-assisted reader.
 import (
 	"context"
 	"encoding/json"
@@ -322,80 +322,11 @@ func experimentHybrid(ctx context.Context, sippy *Client, gcs *Syncer, jobs []ex
 }
 
 func experimentEnrich(ctx context.Context, s *Syncer, job experimentJob, row experimentRow) (*Run, error) {
-	run := &Run{JobName: row.Job, BuildID: row.ID, Application: job.Application, ProwURL: row.URL, StartedAt: &row.Timestamp, State: "unknown", ArtifactState: ArtifactMissing}
-	// Unknown result codes cannot become success via succeeded=true.
-	if !slices.Contains([]string{"S", "F", "I", "U", "N", "n", "A", "f", "R"}, row.Result) {
-		return run, nil
+	r, err := s.fetchIndexedRun(ctx, JobDefinition{Name: job.Name, Application: job.Application, Target: job.Target}, IndexedRun{ID: row.ID, Job: row.Job, URL: row.URL, Timestamp: row.Timestamp, Result: row.Result})
+	if r != nil {
+		r.FetchedAt = time.Time{}
 	}
-	if row.Result == "R" {
-		run.State = "running"
-		return run, nil
-	}
-	dir := job.prowJob().Prefix + row.ID + "/"
-	finData, err := s.client.object(ctx, dir+"finished.json")
-	if err != nil {
-		return nil, err
-	}
-	if finData == nil {
-		return run, nil // no fabricated completion time or terminal success
-	}
-	var fin finished
-	if err := json.Unmarshal(finData, &fin); err != nil {
-		return nil, err
-	}
-	if fin.Timestamp <= 0 || !slices.Contains([]string{"SUCCESS", "FAILURE", "ERROR", "ABORTED"}, fin.Result) {
-		return nil, fmt.Errorf("invalid completion record")
-	}
-	completed := time.Unix(fin.Timestamp, 0).UTC()
-	run.State, run.CompletedAt = strings.ToLower(fin.Result), &completed
-	target := job.Target
-	var artifact []byte
-	if target != "" {
-		artifact, err = s.client.object(ctx, dir+"artifacts/"+target+"/quay-gather/artifacts/tested-images.json")
-		if err != nil {
-			return nil, err
-		}
-	}
-	// A current config may not describe an older run. Only fall back to
-	// prowjob.json when the configured target cannot locate its artifact.
-	if target == "" || artifact == nil {
-		pj, err := s.client.object(ctx, dir+"prowjob.json")
-		if err != nil {
-			return nil, err
-		}
-		if pj == nil {
-			return run, nil
-		}
-		_, actual, err := parseRun(job.prowJob(), row.ID, pj, finData)
-		if err != nil {
-			return nil, err
-		}
-		if actual != target && actual != "" {
-			target = actual
-			artifact, err = s.client.object(ctx, dir+"artifacts/"+target+"/quay-gather/artifacts/tested-images.json")
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	run.ArtifactState = ArtifactNone
-	if target == "" {
-		return run, nil
-	}
-	if artifact != nil {
-		if run.applyArtifact(artifact) && run.State != "success" {
-			run.InstallFailed, err = s.installFailed(ctx, job.prowJob(), row.ID, target)
-		}
-		return run, err
-	}
-	csv, err := s.client.object(ctx, dir+"artifacts/"+target+"/quay-gather/artifacts/olm-csvs.yaml")
-	if err != nil {
-		return nil, err
-	}
-	if csv != nil {
-		run.applyOLMCSVs(csv)
-	}
-	return run, nil
+	return r, err
 }
 
 func experimentSyncer(a *experimentAPI, store Store, jobs []experimentJob) *Syncer {

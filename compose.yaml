@@ -23,8 +23,13 @@ services:
       # the in-cluster service account, which does not exist outside Kubernetes.
       KUBECONFIG: /kube/config
       VALIDATION_PLAN: /config/quay-validation-plan.json
+      # Dynamic configs define coverage; Sippy indexes runs and GCS provides
+      # exact tested-image evidence. Set RR_SIPPY_URL='' for legacy ingestion.
+      PROW_JOB_DISCOVERY: ${RR_PROW_JOB_DISCOVERY:-true}
+      SIPPY_URL: ${RR_SIPPY_URL-https://sippy.dptools.openshift.org}
       # Local review must not write release changes to external systems.
       JIRA_WRITE: "false"
+    command: ["-addr", ":8080", "-db", "/data/release-readiness.db", "-prow-interval", "2m"]
     volumes:
       # Live kubeconfig from `oc login` (token expires ~24h; re-login on the
       # host and restart the container when the konflux sync starts failing).

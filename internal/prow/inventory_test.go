@@ -40,6 +40,7 @@ func TestInventoryPinsAllFilesAndRejectsPartial(t *testing.T) {
 	defer srv.Close()
 	c := NewInventoryClient("")
 	c.BaseURL = srv.URL
+	c.RawBaseURL = ""
 	jobs, rev, err := c.Fetch(t.Context(), "")
 	if err != nil {
 		t.Fatal(err)
@@ -53,5 +54,21 @@ func TestInventoryPinsAllFilesAndRejectsPartial(t *testing.T) {
 	}
 	if jobs, rev, err = c.Fetch(t.Context(), sha); err != nil || jobs != nil || rev != sha {
 		t.Fatalf("unchanged revision: %v", err)
+	}
+}
+
+func TestInventoryRawFilesArePinnedAndUnauthenticated(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/"+sha+"/ci-operator/jobs/test.yaml" || r.Header.Get("Authorization") != "" {
+			t.Errorf("unexpected raw request %s auth=%t", r.URL.Path, r.Header.Get("Authorization") != "")
+		}
+		_, _ = w.Write([]byte("periodics: []"))
+	}))
+	defer srv.Close()
+	c := NewInventoryClient("test-token")
+	c.RawBaseURL = srv.URL
+	if _, err := c.get(t.Context(), "contents/ci-operator/jobs/test.yaml?ref="+sha, true); err != nil {
+		t.Fatal(err)
 	}
 }
