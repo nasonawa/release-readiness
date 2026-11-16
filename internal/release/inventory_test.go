@@ -6,20 +6,21 @@ import (
 	"testing"
 )
 
-func TestInventoryPreservesPlannedAndRemovedRequirements(t *testing.T) {
-	base := map[string]ValidationPlan{"quay-3-18": {Revision: "plan", Jobs: []model.ValidationRow{{Job: "future"}, {Job: "old"}}}}
-	jobs := []prow.JobDefinition{{Name: "new", Application: "quay-3-18"}, {Name: "old", Application: "quay-3-18", Removed: true}}
-	plans := MergeValidationInventory(base, jobs, "config")
-	if len(plans["quay-3-18"].Jobs) != 3 || len(base["quay-3-18"].Jobs) != 2 {
-		t.Fatal("lost planned requirement or mutated base")
+func TestInventoryOnlyCurrentPeriodicsAndKnownEmpty(t *testing.T) {
+	r := NewPlanRegistry()
+	c := &model.ReleaseCandidate{Verdict: model.Verdict{State: "ready"}}
+	if EvaluateValidation(r.Plan("quay-3-18"), c, nil, true).PlanKnown {
+		t.Fatal("unloaded inventory looks known")
 	}
-	for _, row := range plans["quay-3-18"].Jobs {
-		if row.Job == "old" && !row.Removed {
-			t.Fatal("removed job not retained")
+	r.Update([]prow.JobDefinition{{Name: "new", Application: "quay-3-18"}, {Name: "old", Application: "quay-3-17", Removed: true}}, "rev")
+	v := EvaluateValidation(r.Plan("quay-3-18"), c, nil, true)
+	if !v.PlanKnown || v.Total != 1 || v.Missing != 1 || v.Ready {
+		t.Fatalf("configured job without runs: %+v", v)
+	}
+	for _, app := range []string{"quay-3-17", "omr-2-0", "quay-99-0"} {
+		v = EvaluateValidation(r.Plan(app), c, nil, true)
+		if !v.PlanKnown || v.Total != 0 || v.Ready {
+			t.Fatalf("no CI configured: %+v", v)
 		}
-	}
-	v := EvaluateValidation(plans["quay-3-18"], &model.ReleaseCandidate{Verdict: model.Verdict{State: "ready"}}, nil, true)
-	if v.Ready || v.Total != 3 || v.Missing != 3 {
-		t.Fatalf("unexpected coverage %+v", v)
 	}
 }

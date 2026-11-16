@@ -360,5 +360,5 @@ func (s *Syncer) installFailed(ctx context.Context, job Job, id, target string) 
 		return false, err
 	}
 	var fin finished
-	return json.Unmarshal(data, &fin) == nil && fin.Result == "FAILURE", nil
+	return json.Unmarshal(data, &fin) == nil && strings.EqualFold(fin.Result, "FAILURE"), nil
 }

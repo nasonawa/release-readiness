@@ -22,7 +22,6 @@ services:
       # Kubeconfig is mounted below; without it the konflux sync falls back to
       # the in-cluster service account, which does not exist outside Kubernetes.
       KUBECONFIG: /kube/config
-      VALIDATION_PLAN: /config/quay-validation-plan.json
       # Dynamic configs define coverage; Sippy indexes runs and GCS provides
       # exact tested-image evidence. Set RR_SIPPY_URL='' for legacy ingestion.
       PROW_JOB_DISCOVERY: ${RR_PROW_JOB_DISCOVERY:-true}
@@ -35,7 +34,6 @@ services:
       # host and restart the container when the konflux sync starts failing).
       - ${HOME}/.kube/config:/kube/config:ro
       - ${RR_DATA_DIR:-rr-data}:/data
-      - ./config:/config:ro
     restart: unless-stopped
 
 volumes:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 type SippyStore interface {
 	InventoryStore
+	ProwApplicationActivity(context.Context) (map[string]bool, error)
 	ListProwRunsByApplication(context.Context, string) ([]Run, error)
 	UpsertProwRuns(context.Context, []*Run) error
 	// CandidateWindowStart is the earliest known ART FBC build start of an
@@ -35,7 +37,13 @@ type SippySync struct {
 	// Zero disables this additional GCS discovery. It is independently paced.
 	LegacyInterval time.Duration
 	lastLegacy     time.Time
-	now            func() time.Time
+	// History is best effort, after foreground work, one stream per interval.
+	// Zero HistoryInterval disables history. Failures have separate freshness.
+	HistoryInterval, HistoryBudget time.Duration
+	HistoryStatus                  *syncstatus.Source
+	lastHistory                    time.Time
+	historyCursor                  int
+	now                            func() time.Time
 }
 
 func (s *SippySync) clock() time.Time {
@@ -49,7 +57,11 @@ func (s *SippySync) Run(ctx context.Context, interval time.Duration) {
 	s.lastLegacy = s.clock()
 	for {
 		pass, cancel := context.WithTimeout(ctx, 10*time.Minute)
-		s.Status.Report(s.SyncOnce(pass))
+		err := s.SyncOnce(pass)
+		s.Status.Report(err)
+		if err != nil {
+			slog.Warn("Prow foreground sync failed", "error", err)
+		}
 		cancel()
 		timer := time.NewTimer(interval)
 		select {
@@ -75,30 +87,68 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 			groups[d.Application] = append(groups[d.Application], d)
 		}
 	}
-	apps := make([]string, 0, len(groups))
-	for app := range groups {
-		apps = append(apps, app)
+	activity, err := s.Store.ProwApplicationActivity(ctx)
+	if err != nil {
+		return err
 	}
-	sort.Strings(apps)
+	var active, unknown, historical []string
+	for app := range groups {
+		if isActive, known := activity[app]; !known {
+			unknown = append(unknown, app)
+		} else if isActive {
+			active = append(active, app)
+		} else {
+			historical = append(historical, app)
+		}
+	}
+	sort.Strings(active)
+	sort.Strings(historical)
+	sort.Strings(unknown)
+	active = append(active, unknown...)
 	var pass syncstatus.Pass
-	for _, app := range apps {
+	for _, app := range active {
 		if ctx.Err() != nil {
 			return errors.Join(pass.Err(), ctx.Err())
 		}
 		pass.Add(s.syncStream(ctx, app, groups[app]))
 	}
 	if s.LegacyInterval > 0 && (s.lastLegacy.IsZero() || s.clock().Sub(s.lastLegacy) >= s.LegacyInterval) {
-		// Use the authoritative inventory rather than rediscovering job names
-		// from historical GCS directories. Retain the legacy run retention logic.
-		for _, app := range apps {
+		for _, app := range active {
 			for _, d := range groups[app] {
+				if ctx.Err() != nil {
+					return errors.Join(pass.Err(), ctx.Err())
+				}
 				_, err := s.Artifacts.syncJob(ctx, d.Job())
 				pass.Add(err)
 			}
 		}
 		s.lastLegacy = s.clock()
 	}
-	return pass.Err()
+	// Do not spend time on history while current releases need a retry.
+	if err := pass.Err(); err != nil {
+		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if s.HistoryInterval <= 0 || len(historical) == 0 || (!s.lastHistory.IsZero() && s.clock().Sub(s.lastHistory) < s.HistoryInterval) {
+		return nil
+	}
+	app := historical[s.historyCursor%len(historical)]
+	s.historyCursor++
+	budget := s.HistoryBudget
+	if budget <= 0 {
+		budget = 30 * time.Second
+	}
+	historyCtx, cancel := context.WithTimeout(ctx, budget)
+	err = s.syncStream(historyCtx, app, groups[app])
+	cancel()
+	s.lastHistory = s.clock()
+	s.HistoryStatus.Report(err)
+	if err != nil {
+		slog.Warn("Prow historical sync failed", "application", app, "error", err)
+	}
+	return nil
 }
 
 func (s *SippySync) syncStream(ctx context.Context, app string, definitions []JobDefinition) error {
@@ -161,6 +211,8 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		}
 		pending = append(pending, row)
 	}
+	// Prefer recent evidence even if the index returns an unexpected ordering.
+	sort.SliceStable(pending, func(i, j int) bool { return pending[i].Timestamp.After(pending[j].Timestamp) })
 	var batch []*Run
 	flush := func() error {
 		if len(batch) == 0 {

@@ -12,7 +12,7 @@ import (
 
 func TestDynamicInventoryFreshnessAndZeroRunCoverage(t *testing.T) {
 	s := setupTestServer(t)
-	s.InventoryPlans = release.NewPlanRegistry(nil)
+	s.InventoryPlans = release.NewPlanRegistry()
 	s.InventoryPlans.Update([]prow.JobDefinition{{Name: "new-job", Application: "quay-3-18"}}, "rev")
 	for _, name := range []string{"prow", "konflux", "art-history", "fbc-render"} {
 		s.syncStatus.Track(name, time.Minute).Report(nil)
