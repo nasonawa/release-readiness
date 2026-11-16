@@ -11,6 +11,23 @@ import (
 	"github.com/quay/release-readiness/internal/prow"
 )
 
+// ProwApplicationActivity marks streams with any unreleased, non-archived
+// JIRA version as active. Unknown streams are deliberately absent: callers
+// must prioritize them until release discovery establishes their lifecycle.
+func (d *DB) ProwApplicationActivity(ctx context.Context) (map[string]bool, error) {
+	versions, err := d.ListAllReleaseVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	active := map[string]bool{}
+	for _, v := range versions {
+		if v.KonfluxApplication != "" {
+			active[v.KonfluxApplication] = active[v.KonfluxApplication] || (!v.Released && !v.Archived)
+		}
+	}
+	return active, nil
+}
+
 // CandidateWindowStart uses ART build time, never the local observation time.
 // Any active version without a dated FBC broadens the search to retention.
 func (d *DB) CandidateWindowStart(ctx context.Context, app string) (time.Time, error) {

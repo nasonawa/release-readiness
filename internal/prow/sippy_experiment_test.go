@@ -62,13 +62,14 @@ type experimentFilter struct {
 // experimentAPI supplies separate Sippy and GCS endpoints on one loopback
 // server. Every run and artifact is generated locally, including large IDs.
 type experimentAPI struct {
-	server  *httptest.Server
-	rows    map[string][]experimentRow
-	objects map[string][]byte
-	lists   map[string][]string
-	fail    map[string]int
-	mu      sync.Mutex
-	counts  map[string]int
+	server   *httptest.Server
+	rows     map[string][]experimentRow
+	objects  map[string][]byte
+	lists    map[string][]string
+	fail     map[string]int
+	mu       sync.Mutex
+	counts   map[string]int
+	releases []string
 }
 
 func experimentJSON(t *testing.T, v any) []byte {
@@ -135,6 +136,9 @@ func newExperimentAPI(t *testing.T, jobs []experimentJob) *experimentAPI {
 	a.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.mu.Lock()
 		a.counts[r.URL.Path]++
+		if r.URL.Path == "/api/jobs/runs" {
+			a.releases = append(a.releases, r.URL.Query().Get("release"))
+		}
 		a.mu.Unlock()
 		if code := a.fail[r.URL.Path]; code != 0 {
 			http.Error(w, "simulated source failure", code)

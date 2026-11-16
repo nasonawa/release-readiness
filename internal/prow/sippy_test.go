@@ -2,18 +2,26 @@ package prow
 
 import (
 	"context"
+	"github.com/quay/release-readiness/internal/syncstatus"
 	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
 
 type sippyMemory struct {
+	activity     map[string]bool
 	definitions  []JobDefinition
 	runs         map[string]Run
 	start        time.Time
 	largestBatch int
 }
 
+func (m *sippyMemory) ProwApplicationActivity(context.Context) (map[string]bool, error) {
+	return m.activity, nil
+}
 func (m *sippyMemory) JobInventory(context.Context) ([]JobDefinition, string, error) {
 	return m.definitions, "revision", nil
 }
@@ -152,5 +160,108 @@ func TestSippyLegacyRefreshFindsUnindexedPendingRun(t *testing.T) {
 	}
 	if counts = experimentCategories(a.takeCounts()); counts["listing"] != 0 {
 		t.Fatalf("legacy refresh repeated before interval: %v", counts)
+	}
+}
+
+func TestUnreleasedFirstAndHistoryPacedAndRotated(t *testing.T) {
+	jobs := experimentInventory(t)
+	s, a, m := productionSippy(t, jobs)
+	// Two known historical streams; unknown streams stay foreground.
+	m.activity = map[string]bool{"quay-3-10": false, "quay-3-12": false, "quay-3-18": true}
+	s.HistoryInterval = time.Hour
+	s.HistoryBudget = time.Second
+	getCalls := func() []string {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		out := slices.Clone(a.releases)
+		a.releases = nil
+		return out
+	}
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	calls := getCalls()
+	if len(calls) != 8 || calls[0] != "quay-3.18" || calls[len(calls)-1] != "quay-3.10" || slices.Contains(calls, "quay-3.12") {
+		t.Fatalf("foreground then one history: %v", calls)
+	}
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	calls = getCalls()
+	if len(calls) != 7 || slices.Contains(calls, "quay-3.10") || slices.Contains(calls, "quay-3.12") {
+		t.Fatalf("history not paced: %v", calls)
+	}
+	s.lastHistory = s.clock().Add(-2 * time.Hour)
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	calls = getCalls()
+	if calls[len(calls)-1] != "quay-3.12" {
+		t.Fatalf("history did not rotate: %v", calls)
+	}
+}
+
+func TestHistoryTimeoutDoesNotFailForeground(t *testing.T) {
+	jobs := experimentInventory(t)[:1]
+	s, _, m := productionSippy(t, jobs)
+	m.activity = map[string]bool{jobs[0].Application: false}
+	s.HistoryInterval = time.Hour
+	s.HistoryBudget = 20 * time.Millisecond
+	status := syncstatus.New()
+	s.HistoryStatus = status.Track("prow-history", 0)
+	slow := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	defer slow.Close()
+	s.Client = NewSippyClient(slow.URL)
+	start := time.Now()
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatalf("history failed foreground: %v", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("history exceeded budget")
+	}
+	problems := status.Problems(time.Now())
+	if len(problems) != 1 || problems[0].Source != "prow-history" {
+		t.Fatalf("missing history failure: %v", problems)
+	}
+}
+
+func TestForegroundFailureSkipsHistory(t *testing.T) {
+	s, a, m := productionSippy(t, experimentInventory(t))
+	m.activity = map[string]bool{"quay-3-10": false}
+	s.HistoryInterval = time.Hour
+	a.fail["/api/jobs/runs"] = http.StatusServiceUnavailable
+	if err := s.SyncOnce(t.Context()); err == nil {
+		t.Fatal("foreground error ignored")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if slices.Contains(a.releases, "quay-3.10") {
+		t.Fatal("history ran while foreground failed")
+	}
+}
+
+func TestCompletionResultCaseAndUnknownRemainConservative(t *testing.T) {
+	for _, result := range []string{"success", "failure", "error", "aborted", "SUCCESS", "unexpected"} {
+		t.Run(result, func(t *testing.T) {
+			jobs := experimentInventory(t)[:1]
+			s, a, m := productionSippy(t, jobs)
+			row := a.rows[jobs[0].Release][0]
+			path := jobs[0].prowJob().Prefix + row.ID + "/finished.json"
+			a.objects[path] = experimentJSON(t, finished{Timestamp: row.Timestamp.Add(time.Hour).Unix(), Result: result})
+			err := s.SyncOnce(t.Context())
+			if result == "unexpected" {
+				if err == nil {
+					t.Fatal("unknown terminal state accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			run := m.runs[row.Job+"/"+row.ID]
+			if run.State != strings.ToLower(result) || run.CompletedAt == nil {
+				t.Fatalf("wrong terminal result: %+v", run)
+			}
+		})
 	}
 }

@@ -136,7 +136,7 @@ For the v2.0 image, OpenShift manifests, operator-run Secret commands, and image
 
 The `v2.0` UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
 
-`GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. With `-prow-job-discovery` (`PROW_JOB_DISCOVERY=true`), the app imports release periodics from both `ci-operator/jobs/quay/quay` and `ci-operator/jobs/quay/quay-operator`, pinned to one openshift/release commit. The complete inventory is stored in SQLite and published atomically. Jobs with no runs remain required. Removed jobs remain missing requirements pending review; failed or partial imports preserve the last good inventory. The optional `-validation-plan` (`VALIDATION_PLAN`) JSON remains a bootstrap/explicit future-requirement overlay. Its jobs are never silently dropped; an overlay job absent from a successfully imported inventory remains unconfigured/missing. No run status is embedded in either plan.
+`GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. With `-prow-job-discovery` (`PROW_JOB_DISCOVERY=true`), the app imports release periodics from both `ci-operator/jobs/quay/quay` and `ci-operator/jobs/quay/quay-operator`, pinned to one openshift/release commit. The complete inventory is stored in SQLite and published atomically. Jobs with no runs remain required. Only current periodic jobs define coverage; removed definitions remain in SQLite for audit but no longer count as configured requirements. Failed or partial imports preserve the last good inventory. Discovery does not read `_generator/matrix.yaml`, generated ci-operator configs, or the old generator-derived JSON snapshot. `-validation-plan` is ignored in discovery mode and remains available only for legacy ingestion. A complete inventory with no jobs for a stream produces “No CI configured” on its card and workbench; an inventory that has never loaded is shown as unavailable. Zero jobs never establishes readiness. No run status is embedded in the plan.
 
 Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources (plus periodic inventory when enabled), and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The new projection is advisory and does not execute a shipment or write to JIRA.
 
@@ -146,7 +146,7 @@ The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.
 flowchart LR
     A[ART builds] --> K[Konflux snapshots and stage releases]
     K --> P[Prow runs against candidate images]
-    G[Reviewed generator job plan] --> V[Full-matrix validation]
+    G[Current periodic job inventory] --> V[Full-matrix validation]
     P --> D[(SQLite ingestion)]
     K --> D
     J[JIRA release scope] --> D
@@ -193,7 +193,6 @@ These tests intercept API responses inside the test browser for deterministic ed
 ```sh
 release-readiness -prow-job-discovery \
   -sippy-url https://sippy.dptools.openshift.org \
-  -validation-plan config/quay-validation-plan.json \
   -prow-interval 2m
 ```
 
@@ -206,7 +205,11 @@ release-readiness -prow-job-discovery \
 | `-jira-workers` | 2 | Concurrent release issue fetches with shared request pacing |
 | `-art-workers` | 2 | Concurrent ART component resolutions |
 | `-ci-candidate-lookback` | 24h | Look back before an active release's earliest known ART FBC build start |
-| `-prow-live-refresh-interval` | 1h | Additional GCS discovery for pending/triggered runs Sippy may omit; 0 disables |
+| `-prow-live-refresh-interval` | 1h | Foreground GCS discovery for pending/triggered runs Sippy may omit; 0 disables |
+| `-prow-history-interval` | 1h | One historical-only stream per interval, after successful foreground work; 0 disables |
+| `-prow-history-budget` | 30s | Maximum duration of that best-effort historical pass |
+
+Sippy ingestion prioritizes streams with any unreleased, non-archived JIRA version. Streams not yet known to JIRA also receive foreground priority so release discovery failures cannot demote new work. A stream containing both shipped and unreleased z-streams stays foreground. Known historical-only streams rotate one at a time after successful foreground work, with an independent interval and time budget; no legacy GCS listing is performed for these historical streams. History errors are reported separately as `prow-history` and do not invalidate current-release `prow` freshness. This scheduling uses persisted JIRA lifecycle flags, not proof of customer publication. If JIRA is stale, classification remains conservative for unknown streams but known lifecycle flags may also be stale.
 
 Sippy supplies release-scoped paginated run indexes. The search starts around the earliest dated FBC of active releases in the stream, with the configured lookback and retention boundary. An active release without a dated FBC broadens the search to retention. The adapter re-reads that bounded window to accommodate late indexing; it does not advance a timestamp-only cursor that could skip late runs. A maximum of 200 pages of 100 runs per stream fails explicitly if exceeded. Sippy's recent history is capped at 90 days even when app retention is disabled; already stored evidence remains governed by app retention. ART timestamps are build start times, not claimed publication timestamps, so they provide a conservative search boundary.
 
@@ -216,8 +219,8 @@ The normal Sippy path avoids GCS directory listings. The separately paced legacy
 
 Worker queues are bounded and cancellation-aware, with serial persistence within each source batch. ART resolver/history/scan calls share a one-request-per-second client limit; existing ART history backfill remains interleaved and serial. JIRA keeps full per-version issue reconciliation and existing 429 retry behavior. No page or partial JIRA response is treated as a complete issue scope.
 
-The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. Static requirements are still useful for matrix combinations that do not have a periodic definition yet. In discovery mode the imported inventory selects jobs; `PROW_JOB_PATTERN` is only used by legacy name discovery when dynamic discovery is off.
+The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. In discovery mode the imported inventory selects jobs; `PROW_JOB_PATTERN` is only used by legacy name discovery when dynamic discovery is off.
 
 For local startup, run `podman compose up --build` (or Docker Compose). To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. To return to entirely legacy configuration, also set `RR_PROW_JOB_DISCOVERY=false` and supply `PROW_JOBS` or `PROW_JOB_PATTERN`. No OCP deployment is needed for these changes.
 
-Verification uses only loopback API mocks: `go test -race ./internal/prow ./internal/db ./internal/release ./internal/server ./internal/jira ./internal/artbuild ./internal/workpool`. The earlier request-count experiment now shares production artifact enrichment; the production integration tests cover batching, persistent caches, late artifacts, pagination failures, candidate windows and inventory freshness. Deployed Sippy contract/stream coverage has not been checked with live statuses.
+Verification uses only loopback API mocks: `go test -race ./internal/prow ./internal/db ./internal/release ./internal/server ./internal/jira ./internal/artbuild ./internal/workpool`. The earlier request-count experiment now shares production artifact enrichment; the production integration tests cover batching, persistent caches, late artifacts, pagination failures, candidate windows and inventory freshness. Local runtime source health is tracked separately from these deterministic mock tests.

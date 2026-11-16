@@ -31,6 +31,7 @@ func (s *Syncer) fetchIndexedRun(ctx context.Context, job JobDefinition, row Ind
 	if err := json.Unmarshal(finData, &fin); err != nil {
 		return nil, err
 	}
+	fin.Result = strings.ToUpper(strings.TrimSpace(fin.Result))
 	if fin.Timestamp <= 0 || !slices.Contains([]string{"SUCCESS", "FAILURE", "ERROR", "ABORTED"}, fin.Result) {
 		return nil, fmt.Errorf("invalid completion record")
 	}

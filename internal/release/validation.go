@@ -1,7 +1,6 @@
 package release
 
 import (
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,65 +12,45 @@ import (
 )
 
 // PlanRegistry publishes immutable complete inventories to concurrent API reads.
-type PlanRegistry struct {
-	base    map[string]ValidationPlan
-	current atomic.Pointer[map[string]ValidationPlan]
+type planSnapshot struct {
+	plans    map[string]ValidationPlan
+	revision string
 }
 
-func NewPlanRegistry(base map[string]ValidationPlan) *PlanRegistry {
-	r := &PlanRegistry{base: MergeValidationInventory(base, nil, "")}
+type PlanRegistry struct {
+	current atomic.Pointer[planSnapshot]
+}
+
+func NewPlanRegistry() *PlanRegistry {
+	r := &PlanRegistry{}
 	r.Update(nil, "")
 	return r
 }
 
 func (r *PlanRegistry) Update(jobs []prow.JobDefinition, revision string) {
-	plans := MergeValidationInventory(r.base, jobs, revision)
-	r.current.Store(&plans)
-}
-
-func (r *PlanRegistry) Plan(app string) ValidationPlan { return (*r.current.Load())[app] }
-
-// MergeValidationInventory preserves explicit future requirements and fills in
-// authoritative periodic names/targets. Removed configured jobs remain missing.
-func MergeValidationInventory(base map[string]ValidationPlan, jobs []prow.JobDefinition, revision string) map[string]ValidationPlan {
-	plans := make(map[string]ValidationPlan, len(base))
-	for app, p := range base {
-		p.Jobs = append([]model.ValidationRow(nil), p.Jobs...)
-		if revision != "" {
-			for i := range p.Jobs {
-				p.Jobs[i].Unconfigured = true
-			}
-		}
-		plans[app] = p
+	snapshot := &planSnapshot{plans: map[string]ValidationPlan{}}
+	if revision != "" {
+		snapshot.revision = "periodics:" + revision
 	}
 	for _, j := range jobs {
-		p := plans[j.Application]
-		idx := -1
-		for i, row := range p.Jobs {
-			if row.Job == j.Name {
-				idx = i
-				break
-			}
+		if j.Removed {
+			continue
 		}
-		if idx < 0 {
-			p.Jobs = append(p.Jobs, model.ValidationRow{Job: j.Name})
-			idx = len(p.Jobs) - 1
-		}
-		row := &p.Jobs[idx]
-		row.OCP = cmp.Or(j.OCP, row.OCP)
-		row.Cloud = cmp.Or(j.Cloud, row.Cloud)
-		row.SourceURL = j.SourceURL
-		row.Removed = j.Removed
-		row.Unconfigured = false
-		plans[j.Application] = p
+		p := snapshot.plans[j.Application]
+		p.Revision = snapshot.revision
+		p.Jobs = append(p.Jobs, model.ValidationRow{Job: j.Name, OCP: j.OCP, Cloud: j.Cloud, SourceURL: j.SourceURL})
+		snapshot.plans[j.Application] = p
 	}
-	if revision != "" {
-		for app, p := range plans {
-			p.Revision = "periodics:" + revision + ";plan:" + p.Revision
-			plans[app] = p
-		}
+	r.current.Store(snapshot)
+}
+
+func (r *PlanRegistry) Plan(app string) ValidationPlan {
+	snapshot := r.current.Load()
+	if p, ok := snapshot.plans[app]; ok {
+		return p
 	}
-	return plans
+	// A complete inventory can positively establish that no jobs exist.
+	return ValidationPlan{Revision: snapshot.revision}
 }
 
 // ValidationPlan comes from reviewed job configurations, never inferred from
@@ -112,7 +91,7 @@ func LoadValidationPlans(path string) (map[string]ValidationPlan, error) {
 // bundles and unverified image identities remain available in CI drill-downs,
 // but cannot satisfy a shipment gate. Unsupported identities remain missing.
 func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, runs []prow.Run, fresh bool) model.Validation {
-	v := model.Validation{PlanKnown: len(plan.Jobs) > 0, Revision: plan.Revision, SourceFresh: fresh, Total: len(plan.Jobs)}
+	v := model.Validation{PlanKnown: plan.Revision != "", Revision: plan.Revision, SourceFresh: fresh, Total: len(plan.Jobs)}
 	exact := map[string]map[string]bool{}
 	if candidate.FBCCandidate != nil {
 		for _, op := range candidate.FBCCandidate.Operators {
@@ -179,6 +158,6 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 		}
 		v.Rows = append(v.Rows, row)
 	}
-	v.Ready = v.PlanKnown && v.Passed == v.Total && fresh && candidate.Verdict.State == "ready"
+	v.Ready = v.PlanKnown && v.Total > 0 && v.Passed == v.Total && fresh && candidate.Verdict.State == "ready"
 	return v
 }

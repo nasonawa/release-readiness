@@ -68,3 +68,28 @@ func TestCandidateWindowUsesARTAndBroadensForUnknownRelease(t *testing.T) {
 		t.Fatalf("unknown candidate narrowed window=%v err=%v", got, err)
 	}
 }
+
+func TestProwApplicationActivity(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "activity.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	for _, v := range []model.ReleaseVersion{
+		{Name: "quay-v3.16.8", KonfluxApplication: "quay-3-16", Released: true},
+		{Name: "quay-v3.16.9", KonfluxApplication: "quay-3-16"},
+		{Name: "quay-v3.10.1", KonfluxApplication: "quay-3-10", Released: true},
+		{Name: "quay-v3.10.2", KonfluxApplication: "quay-3-10", Archived: true},
+	} {
+		if err = d.UpsertReleaseVersion(t.Context(), &v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	activity, err := d.ProwApplicationActivity(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(activity) != 2 || !activity["quay-3-16"] || activity["quay-3-10"] {
+		t.Fatalf("wrong lifecycle priorities: %v", activity)
+	}
+}

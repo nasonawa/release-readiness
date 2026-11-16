@@ -90,7 +90,7 @@ func main() {
 	jiraWriteEmail := flag.String("jira-write-email", os.Getenv("JIRA_WRITE_EMAIL"), "JIRA Cloud account email of the write credential")
 	jiraWriteToken := flag.String("jira-write-token", os.Getenv("JIRA_WRITE_TOKEN"), "JIRA Cloud API token of the write credential, never the -jira-token one")
 
-	validationPlanPath := flag.String("validation-plan", os.Getenv("VALIDATION_PLAN"), "reviewed required Prow job plan JSON; empty leaves full-matrix readiness unknown")
+	validationPlanPath := flag.String("validation-plan", os.Getenv("VALIDATION_PLAN"), "legacy required-job JSON; ignored when -prow-job-discovery is enabled")
 	jobDiscovery := flag.Bool("prow-job-discovery", os.Getenv("PROW_JOB_DISCOVERY") == "true", "import required release periodics from openshift/release")
 	inventoryInterval := flag.Duration("prow-inventory-interval", 10*time.Minute, "periodic configuration refresh interval")
 	sippyURL := flag.String("sippy-url", os.Getenv("SIPPY_URL"), "Sippy API base URL; empty uses legacy GCS ingestion")
@@ -99,6 +99,8 @@ func main() {
 	artWorkers := flag.Int("art-workers", 2, "maximum concurrent ART component resolutions")
 	ciLookback := flag.Duration("ci-candidate-lookback", 24*time.Hour, "lookback before an ART FBC build for CI runs that started earlier")
 	legacyInterval := flag.Duration("prow-live-refresh-interval", time.Hour, "GCS discovery interval for queued/running jobs absent from Sippy; 0 disables")
+	historyInterval := flag.Duration("prow-history-interval", time.Hour, "best-effort historical CI interval; one stream per pass, 0 disables")
+	historyBudget := flag.Duration("prow-history-budget", 30*time.Second, "maximum time per historical CI pass after unreleased streams")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -109,7 +111,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 {
+	if *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 || *historyInterval < 0 || *historyBudget <= 0 {
 		logger.Error("invalid sync interval or lookback")
 		os.Exit(1)
 	}
@@ -118,7 +120,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	validationPlans, err := release.LoadValidationPlans(*validationPlanPath)
+	planPath := *validationPlanPath
+	if *jobDiscovery {
+		planPath = ""
+	}
+	validationPlans, err := release.LoadValidationPlans(planPath)
 	if err != nil {
 		logger.Error("read validation plan", "error", err)
 		os.Exit(1)
@@ -167,7 +173,7 @@ func main() {
 
 	var inventoryPlans *release.PlanRegistry
 	if *jobDiscovery {
-		inventoryPlans = release.NewPlanRegistry(validationPlans)
+		inventoryPlans = release.NewPlanRegistry()
 		definitions, revision, err := database.JobInventory(ctx)
 		if err != nil {
 			logger.Error("load periodic inventory", "error", err)
@@ -278,7 +284,10 @@ func main() {
 			syncer.Inventory = database
 		}
 		if *sippyURL != "" {
-			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Status: syncer.Status, Workers: *ciWorkers, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval}
+			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Status: syncer.Status, Workers: *ciWorkers, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval, HistoryInterval: *historyInterval, HistoryBudget: *historyBudget}
+			if *historyInterval > 0 {
+				indexed.HistoryStatus = status.Track("prow-history", 0)
+			}
 			wg.Go(func() { indexed.Run(ctx, *prowInterval) })
 		} else {
 			wg.Go(func() { syncer.Run(ctx) })
