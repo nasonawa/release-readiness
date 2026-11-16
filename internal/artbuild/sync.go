@@ -90,7 +90,12 @@ type HistorySync struct {
 	// pace spaces out requests, CloseBundle's included.
 	pace *time.Ticker
 	// Status receives each pass's outcome; nil reports nowhere.
-	Status *syncstatus.Source
+	Status                                             *syncstatus.Source
+	Activity                                           func(context.Context) (map[string]bool, error)
+	ForegroundBudget, BackfillBudget, BackfillInterval time.Duration
+	BackfillStatus                                     *syncstatus.Source
+	lastBackfill                                       time.Time
+	backfillCursor                                     int
 }
 
 func NewHistorySync(client *Client, store HistoryStore, logger *slog.Logger) *HistorySync {
@@ -119,6 +124,10 @@ func (h *HistorySync) Run(ctx context.Context, interval time.Duration) {
 // It then reads the source repo of up to sourcesPerPass stored records that
 // lack one.
 func (h *HistorySync) SyncOnce(ctx context.Context) {
+	if h.Activity != nil {
+		h.syncPrioritized(ctx)
+		return
+	}
 	var pass syncstatus.Pass
 	defer func() { h.Status.Report(pass.Err()) }()
 	apps, err := h.store.ListSnapshotApplications(ctx)
