@@ -1,14 +1,78 @@
 package release
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/prow"
 )
+
+// PlanRegistry publishes immutable complete inventories to concurrent API reads.
+type PlanRegistry struct {
+	base    map[string]ValidationPlan
+	current atomic.Pointer[map[string]ValidationPlan]
+}
+
+func NewPlanRegistry(base map[string]ValidationPlan) *PlanRegistry {
+	r := &PlanRegistry{base: MergeValidationInventory(base, nil, "")}
+	r.Update(nil, "")
+	return r
+}
+
+func (r *PlanRegistry) Update(jobs []prow.JobDefinition, revision string) {
+	plans := MergeValidationInventory(r.base, jobs, revision)
+	r.current.Store(&plans)
+}
+
+func (r *PlanRegistry) Plan(app string) ValidationPlan { return (*r.current.Load())[app] }
+
+// MergeValidationInventory preserves explicit future requirements and fills in
+// authoritative periodic names/targets. Removed configured jobs remain missing.
+func MergeValidationInventory(base map[string]ValidationPlan, jobs []prow.JobDefinition, revision string) map[string]ValidationPlan {
+	plans := make(map[string]ValidationPlan, len(base))
+	for app, p := range base {
+		p.Jobs = append([]model.ValidationRow(nil), p.Jobs...)
+		if revision != "" {
+			for i := range p.Jobs {
+				p.Jobs[i].Unconfigured = true
+			}
+		}
+		plans[app] = p
+	}
+	for _, j := range jobs {
+		p := plans[j.Application]
+		idx := -1
+		for i, row := range p.Jobs {
+			if row.Job == j.Name {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			p.Jobs = append(p.Jobs, model.ValidationRow{Job: j.Name})
+			idx = len(p.Jobs) - 1
+		}
+		row := &p.Jobs[idx]
+		row.OCP = cmp.Or(j.OCP, row.OCP)
+		row.Cloud = cmp.Or(j.Cloud, row.Cloud)
+		row.SourceURL = j.SourceURL
+		row.Removed = j.Removed
+		row.Unconfigured = false
+		plans[j.Application] = p
+	}
+	if revision != "" {
+		for app, p := range plans {
+			p.Revision = "periodics:" + revision + ";plan:" + p.Revision
+			plans[app] = p
+		}
+	}
+	return plans
+}
 
 // ValidationPlan comes from reviewed job configurations, never inferred from
 // the runs that happened to execute. Applications share a minor-stream plan.
@@ -69,22 +133,29 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 			}
 		}
 	}
+	// Index candidate-matched runs once, rather than scanning every run for
+	// every required matrix row.
+	completedByJob, runningByJob := map[string]*prow.Run{}, map[string]*prow.Run{}
+	for i := range runs {
+		r := &runs[i]
+		if !exact[r.JobName][r.ProwURL] {
+			continue
+		}
+		if r.CompletedAt != nil && (r.State == "success" || r.State == "failure" || r.State == "error" || r.State == "aborted") {
+			old := completedByJob[r.JobName]
+			if old == nil || r.CompletedAt.After(*old.CompletedAt) || (r.CompletedAt.Equal(*old.CompletedAt) && r.State != "success") {
+				completedByJob[r.JobName] = r
+			}
+		} else if r.State == "pending" || r.State == "running" || r.State == "triggered" {
+			runningByJob[r.JobName] = r
+		}
+	}
 	for _, spec := range plan.Jobs {
 		row := spec
 		row.State, row.RunURL = "missing", ""
-		var completed, running *prow.Run
-		for i := range runs {
-			r := &runs[i]
-			if r.JobName != spec.Job || !exact[r.JobName][r.ProwURL] {
-				continue
-			}
-			if r.CompletedAt != nil && (r.State == "success" || r.State == "failure" || r.State == "error" || r.State == "aborted") {
-				if completed == nil || r.CompletedAt.After(*completed.CompletedAt) || (r.CompletedAt.Equal(*completed.CompletedAt) && r.State != "success") {
-					completed = r
-				}
-			} else if r.State == "pending" || r.State == "running" || r.State == "triggered" {
-				running = r
-			}
+		completed, running := completedByJob[spec.Job], runningByJob[spec.Job]
+		if spec.Removed {
+			completed, running = nil, nil
 		}
 		if completed != nil {
 			row.RunURL = completed.ProwURL

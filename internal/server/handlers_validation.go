@@ -13,7 +13,11 @@ import (
 func (s *Server) validation(app string, candidate *model.ReleaseCandidate, runs []prow.Run) model.Validation {
 	fresh := true
 	// No successful source pass is not evidence of freshness.
-	for _, name := range []string{"prow", "konflux", "art-history", "fbc-render"} {
+	required := []string{"prow", "konflux", "art-history", "fbc-render"}
+	if s.InventoryPlans != nil {
+		required = append(required, "prow-inventory")
+	}
+	for _, name := range required {
 		found := false
 		for _, source := range s.syncStatus.Sources() {
 			if source.Source == name && source.LastSuccess != nil {
@@ -28,9 +32,17 @@ func (s *Server) validation(app string, candidate *model.ReleaseCandidate, runs 
 		switch problem.Source {
 		case "prow", "konflux", "art-history", "fbc-render":
 			fresh = false
+		case "prow-inventory":
+			if s.InventoryPlans != nil {
+				fresh = false
+			}
 		}
 	}
-	return release.EvaluateValidation(s.ValidationPlans[app], candidate, runs, fresh)
+	plan := s.ValidationPlans[app]
+	if s.InventoryPlans != nil {
+		plan = s.InventoryPlans.Plan(app)
+	}
+	return release.EvaluateValidation(plan, candidate, runs, fresh)
 }
 
 func (s *Server) handleValidation(w http.ResponseWriter, r *http.Request) {

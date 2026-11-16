@@ -28,6 +28,7 @@ type Server struct {
 	// the lookup off.
 	ArtFBC          *artfbc.Client
 	ValidationPlans map[string]release.ValidationPlan
+	InventoryPlans  *release.PlanRegistry
 }
 
 // New builds the server.

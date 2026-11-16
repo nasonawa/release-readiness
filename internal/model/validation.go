@@ -15,6 +15,8 @@ type Validation struct {
 }
 
 type ValidationRow struct {
+	Unconfigured bool   `json:"unconfigured,omitempty"`
+	Removed      bool   `json:"removed,omitempty"`
 	Job          string `json:"job"`
 	OCP          string `json:"ocp"`
 	Cloud        string `json:"cloud"`
