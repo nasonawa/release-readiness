@@ -39,11 +39,23 @@ func (d *DB) CandidateWindowStart(ctx context.Context, app string) (time.Time, e
 	if err != nil {
 		return time.Time{}, err
 	}
-	active := map[string]bool{}
+	var names []string
 	for _, v := range versions {
 		if v.KonfluxApplication == app && !v.Released && !v.Archived {
-			active[strings.TrimPrefix(v.Name, "quay-v")] = false
+			names = append(names, v.Name)
 		}
+	}
+	return d.CandidateWindowStartForVersions(ctx, app, names)
+}
+
+func (d *DB) CandidateWindowStartForVersions(ctx context.Context, app string, names []string) (time.Time, error) {
+	parts := strings.Split(app, "-")
+	if len(parts) != 3 {
+		return time.Time{}, nil
+	}
+	active := map[string]bool{}
+	for _, name := range names {
+		active[strings.TrimPrefix(name, "quay-v")] = false
 	}
 	if len(active) == 0 {
 		return time.Time{}, nil

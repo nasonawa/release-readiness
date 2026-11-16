@@ -30,6 +30,8 @@ type SippySync struct {
 	Client              *SippyClient
 	Artifacts           *Syncer
 	Store               SippyStore
+	Activity            func(context.Context) (map[string]bool, error)
+	WindowStart         func(context.Context, string) (time.Time, error)
 	Status              *syncstatus.Source
 	Workers             int
 	Retention, Lookback time.Duration
@@ -87,7 +89,11 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 			groups[d.Application] = append(groups[d.Application], d)
 		}
 	}
-	activity, err := s.Store.ProwApplicationActivity(ctx)
+	activityFn := s.Activity
+	if activityFn == nil {
+		activityFn = s.Store.ProwApplicationActivity
+	}
+	activity, err := activityFn(ctx)
 	if err != nil {
 		return err
 	}
@@ -105,6 +111,7 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 	sort.Strings(historical)
 	sort.Strings(unknown)
 	active = append(active, unknown...)
+	slog.Info("Prow scheduling", "foreground", active, "historical", historical)
 	var pass syncstatus.Pass
 	for _, app := range active {
 		if ctx.Err() != nil {
@@ -151,7 +158,16 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 	return nil
 }
 
-func (s *SippySync) syncStream(ctx context.Context, app string, definitions []JobDefinition) error {
+func (s *SippySync) syncStream(ctx context.Context, app string, definitions []JobDefinition) (err error) {
+	started := time.Now()
+	metrics := &requestMetrics{}
+	ctx = context.WithValue(ctx, requestMetricsKey{}, metrics)
+	var indexed, cached, deferred, persisted int
+	var indexDuration time.Duration
+	defer func() {
+		slog.Info("Prow stream synced", "application", app, "duration_ms", time.Since(started).Milliseconds(), "sippy_ms", indexDuration.Milliseconds(), "sippy_pages", metrics.sippy.Load(), "gcs_requests", metrics.gcs.Load(), "indexed_runs", indexed, "cache_hits", cached, "retry_deferred", deferred, "persisted_runs", persisted, "failed", err != nil)
+	}()
+
 	parts := strings.Split(app, "-")
 	if len(parts) != 3 || parts[0] != "quay" {
 		return fmt.Errorf("unsupported Sippy application %q", app)
@@ -162,7 +178,11 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		retention = 90 * 24 * time.Hour
 	}
 	from := now.Add(-retention)
-	start, err := s.Store.CandidateWindowStart(ctx, app)
+	windowFn := s.WindowStart
+	if windowFn == nil {
+		windowFn = s.Store.CandidateWindowStart
+	}
+	start, err := windowFn(ctx, app)
 	if err != nil {
 		return err
 	}
@@ -180,7 +200,10 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 	for _, r := range known {
 		cache[r.JobName+"/"+r.BuildID] = r
 	}
+	indexStart := time.Now()
 	rows, err := s.Client.Runs(ctx, "quay-"+parts[1]+"."+parts[2], from, now)
+	indexDuration = time.Since(indexStart)
+	indexed = len(rows)
 	if err != nil {
 		return fmt.Errorf("%s: %w", app, err)
 	}
@@ -207,6 +230,11 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		seen[key] = true
 		r := cache[key]
 		if r.CompletedAt != nil && r.ArtifactState == ArtifactPresent && digest(r.CatalogRef) != "" {
+			cached++
+			continue
+		}
+		if !r.FetchedAt.IsZero() && !r.FetchedAt.After(now) && now.Sub(r.FetchedAt) < evidenceRetryDelay(r, now) {
+			deferred++
 			continue
 		}
 		pending = append(pending, row)
@@ -219,6 +247,9 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 			return nil
 		}
 		err := s.Store.UpsertProwRuns(ctx, batch)
+		if err == nil {
+			persisted += len(batch)
+		}
 		batch = nil
 		return err
 	}
@@ -227,6 +258,7 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		if err != nil {
 			return nil, fmt.Errorf("%s/%s: %w", row.Job, row.ID, err)
 		}
+		r.FetchedAt = s.clock()
 		return r, nil
 	}, func(row IndexedRun, r *Run) error {
 		// A temporary missing finish file cannot erase persisted terminal data.
@@ -240,4 +272,19 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		return nil
 	})
 	return errors.Join(err, flush())
+}
+
+// Fetch caching is distinct from readiness: legacy evidence never acquires an
+// exact identity merely because its next fetch has been deferred.
+func evidenceRetryDelay(r Run, now time.Time) time.Duration {
+	if r.CompletedAt == nil {
+		return 0
+	} // observe running/unknown state every pass
+	if now.Sub(*r.CompletedAt) < 24*time.Hour {
+		return 2 * time.Minute
+	}
+	if r.ArtifactState == ArtifactPresent || r.ArtifactState == ArtifactOLMCSVs {
+		return 24 * time.Hour
+	}
+	return 6 * time.Hour
 }

@@ -49,6 +49,7 @@ func (c *SippyClient) Runs(ctx context.Context, release string, from, until time
 		if err != nil {
 			return nil, err
 		}
+		countRequest(ctx, true)
 		resp, err := c.HTTP.Do(req)
 		if err != nil {
 			return nil, err

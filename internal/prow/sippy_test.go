@@ -2,6 +2,7 @@ package prow
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/quay/release-readiness/internal/syncstatus"
 	"net/http"
 	"net/http/httptest"
@@ -100,6 +101,8 @@ func TestSippyProductionWindowAndLateArtifacts(t *testing.T) {
 		t.Fatal("missing identity marked present")
 	}
 	a.objects[path] = artifact
+	next := s.clock().Add(3 * time.Minute)
+	s.now = func() time.Time { return next }
 	if err := s.SyncOnce(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -263,5 +266,67 @@ func TestCompletionResultCaseAndUnknownRemainConservative(t *testing.T) {
 				t.Fatalf("wrong terminal result: %+v", run)
 			}
 		})
+	}
+}
+
+func TestLegacyEvidenceBackoffSurvivesReaderRestart(t *testing.T) {
+	jobs := experimentInventory(t)[:1]
+	s, a, m := productionSippy(t, jobs)
+	row := a.rows[jobs[0].Release][0]
+	path := jobs[0].prowJob().Prefix + row.ID + "/artifacts/" + jobs[0].Target + "/quay-gather/artifacts/tested-images.json"
+	var artifact map[string]any
+	if err := json.Unmarshal(a.objects[path], &artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact["catalog"] = map[string]any{}
+	a.objects[path] = experimentJSON(t, artifact)
+	later := s.clock().Add(72 * time.Hour)
+	s.now = func() time.Time { return later }
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	a.takeCounts()
+	key := row.Job + "/" + row.ID
+	if m.runs[key].CatalogRef != "" {
+		t.Fatal("fixture still has exact catalog")
+	}
+	s.Client = NewSippyClient(a.server.URL)
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	counts := experimentCategories(a.takeCounts())
+	if counts["tested-images"] != 0 || counts["finished"] != 0 {
+		t.Fatalf("legacy evidence refetched: %v", counts)
+	}
+	later = later.Add(25 * time.Hour)
+	if err := s.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	counts = experimentCategories(a.takeCounts())
+	if counts["tested-images"] != 1 {
+		t.Fatalf("late identity never retried: %v", counts)
+	}
+	if m.runs[key].CatalogRef != "" {
+		t.Fatal("backoff fabricated readiness identity")
+	}
+}
+
+func TestEvidenceRetryDelays(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-48 * time.Hour)
+	recent := now.Add(-time.Hour)
+	for _, tc := range []struct {
+		run  Run
+		want time.Duration
+	}{
+		{Run{}, 0},
+		{Run{CompletedAt: &recent, ArtifactState: ArtifactNone}, 2 * time.Minute},
+		{Run{CompletedAt: &old, ArtifactState: ArtifactNone}, 6 * time.Hour},
+		{Run{CompletedAt: &old, ArtifactState: ArtifactPresent}, 24 * time.Hour},
+		{Run{CompletedAt: &old, ArtifactState: ArtifactOLMCSVs}, 24 * time.Hour},
+	} {
+		if got := evidenceRetryDelay(tc.run, now); got != tc.want {
+			t.Fatalf("got %v want %v", got, tc.want)
+		}
 	}
 }

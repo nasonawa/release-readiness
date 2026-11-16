@@ -224,6 +224,18 @@ func main() {
 		wg.Go(func() { syncer.Run(ctx, *jiraPollInterval) })
 	}
 
+	var shipped *catalog.Shipped
+	if *catalogURL != "" {
+		logger.Info("catalog shipped lookup enabled", "url", *catalogURL)
+		shipped = catalog.NewShipped(catalog.NewClient(*catalogURL, &http.Client{Timeout: time.Minute}), logger.With("component", "catalog"))
+		shipped.Status = status.Track("catalog", time.Hour)
+		wg.Go(func() { shipped.Run(ctx, time.Hour) })
+	}
+
+	selector := release.NewSelector(database, shipped)
+	selector.ArtBaseURL = *artURL
+	selector.StageReleasePlanPattern = stagePlans
+
 	var art *artbuild.Client
 	if *artURL != "" {
 		artLog := logger.With("component", "art-resolve")
@@ -266,14 +278,6 @@ func main() {
 		wg.Go(func() { reconciler.Run(ctx, 10*time.Minute) })
 	}
 
-	var shipped *catalog.Shipped
-	if *catalogURL != "" {
-		logger.Info("catalog shipped lookup enabled", "url", *catalogURL)
-		shipped = catalog.NewShipped(catalog.NewClient(*catalogURL, &http.Client{Timeout: time.Minute}), logger.With("component", "catalog"))
-		shipped.Status = status.Track("catalog", time.Hour)
-		wg.Go(func() { shipped.Run(ctx, time.Hour) })
-	}
-
 	if len(prowJobList) > 0 || prowPattern != nil || *jobDiscovery {
 		logger.Info("prow sync enabled", "jobs", len(prowJobList), "pattern", *prowJobPattern, "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
@@ -284,7 +288,7 @@ func main() {
 			syncer.Inventory = database
 		}
 		if *sippyURL != "" {
-			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Status: syncer.Status, Workers: *ciWorkers, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval, HistoryInterval: *historyInterval, HistoryBudget: *historyBudget}
+			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Activity: selector.IngestionActivity, WindowStart: selector.CIWindowStart, Status: syncer.Status, Workers: *ciWorkers, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval, HistoryInterval: *historyInterval, HistoryBudget: *historyBudget}
 			if *historyInterval > 0 {
 				indexed.HistoryStatus = status.Track("prow-history", 0)
 			}
@@ -317,9 +321,6 @@ func main() {
 		})
 	}
 
-	selector := release.NewSelector(database, shipped)
-	selector.ArtBaseURL = *artURL
-	selector.StageReleasePlanPattern = stagePlans
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, selector, status, logger)
 	srv.ValidationPlans = validationPlans
 	srv.InventoryPlans = inventoryPlans
