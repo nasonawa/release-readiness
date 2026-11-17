@@ -5,10 +5,11 @@ Service, HTTPS Route, service account, injected trusted CA bundle, configuration
 and credentials. It uses dynamic Prow periodic discovery; no static validation
 plan or generator matrix is required. JIRA writes are disabled.
 
-The default release image is
-`quay.io/nasonawa/release-readness:v2.2`. Rebuild this tag from the **current branch**
-before deployment: the previously published image predates the worker-budget and
-ART-group flags. Preparing these files does not build an image or deploy anything.
+The example image is `quay.io/your-org/release-readiness:v2.2`. Replace
+`your-org` with your registry organization and build and publish the image from
+the current code before deployment. Replace `your-namespace` with your target
+OpenShift project throughout the configuration and commands. Preparing these
+files does not build an image or deploy anything.
 
 ## Prepare configuration
 
@@ -22,7 +23,7 @@ chmod 600 deploy/.env
 Edit `deploy/.env`:
 
 - `IMAGE`: full image reference with an explicit tag or digest.
-- `NAMESPACE`: target OpenShift project (default `nasonawa`).
+- `NAMESPACE`: target OpenShift project (replace the `your-namespace` placeholder).
 - `JIRA_EMAIL` and `JIRA_TOKEN`: read credentials.
 - `GITLAB_TOKEN`: required read access to shipment MRs.
 - `KONFLUX_KUBECONFIG`: path to a self-contained Konflux reader kubeconfig.
@@ -79,12 +80,12 @@ oc kustomize deploy/.generated > /dev/null
 
 # Use the context for your application cluster, not the Konflux reader context.
 oc config use-context YOUR_APP_CLUSTER_CONTEXT
-oc project nasonawa
-# If the project does not exist and you have permission: oc new-project nasonawa
+oc project your-namespace
+# If the project does not exist and you have permission: oc new-project your-namespace
 oc apply -k deploy/.generated
-oc -n nasonawa rollout status deployment/release-readiness --timeout=300s
-oc -n nasonawa get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
-oc -n nasonawa logs deployment/release-readiness --tail=100
+oc -n your-namespace rollout status deployment/release-readiness --timeout=300s
+oc -n your-namespace get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
+oc -n your-namespace logs deployment/release-readiness --tail=100
 ```
 
 If you change `NAMESPACE`, use that project in the commands. The overlay explicitly
@@ -113,8 +114,8 @@ a tag with unchanged configuration, explicitly restart the Deployment:
 ```bash
 python3 deploy/configure.py
 oc apply -k deploy/.generated
-oc -n nasonawa rollout restart deployment/release-readiness
-oc -n nasonawa rollout status deployment/release-readiness --timeout=300s
+oc -n your-namespace rollout restart deployment/release-readiness
+oc -n your-namespace rollout status deployment/release-readiness --timeout=300s
 ```
 
 Older generated Secrets and ConfigMaps are retained by `oc apply`; remove them
@@ -124,7 +125,7 @@ rollback. Do not use broad pruning that could remove the database PVC.
 To stop the app while preserving its database and configuration:
 
 ```bash
-oc -n nasonawa scale deployment/release-readiness --replicas=0
+oc -n your-namespace scale deployment/release-readiness --replicas=0
 ```
 
 `oc delete -k deploy/.generated` also deletes the PVC and can destroy its data.
