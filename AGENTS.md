@@ -74,8 +74,9 @@ Flags (env fallback in parentheses; defaults point at production services):
   needs, and the age past which Konflux and Prow skip it on ingest.
 
 `cmd/release-readiness/main.go` is the source of truth for the flag set.
-`dev/shots.py` takes full-page screenshots of a running instance (see
-`dev/README.md`).
+`web/e2e/` owns Playwright tests and TypeScript screenshot, accessibility, and
+comparison tools (see `web/e2e/README.md`). Run `npm run typecheck:e2e` and
+`npm run test:e2e` from `web/` for changes there.
 
 ## Layout
 
@@ -99,7 +100,8 @@ Flags (env fallback in parentheses; defaults point at production services):
 | `internal/model/` | Shared data types |
 | `web/` | React 19 + TypeScript SPA, PatternFly 6, Vite 8; API client `web/src/api/client.ts`, pages in `web/src/pages/` |
 | `deploy/` | Kubernetes manifests (Deployment, Service, Route, PVC, RBAC) and `Containerfile` |
-| `dev/` | Local dev tooling, one line each in `dev/README.md` |
+| `web/e2e/` | Browser tests, shared fixtures/helpers, and TypeScript review tools |
+| `docs/design-history/` | Historical screenshots and recordings, not test baselines |
 | `.github/workflows/` | CI: Go lint+test, web lint+build, image build; sqlc diff |
 | `.tekton/` | Konflux pipeline definitions |
 

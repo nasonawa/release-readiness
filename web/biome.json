@@ -6,7 +6,7 @@
 		"defaultBranch": "main"
 	},
 	"files": {
-		"includes": ["src/**"]
+		"includes": ["src/**", "e2e/**", "playwright.config.ts"]
 	},
 	"formatter": {
 		"indentStyle": "tab"
