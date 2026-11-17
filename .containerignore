@@ -11,3 +11,9 @@ web/test-results
 web/playwright-report
 *.db
 *.db-*
+
+# Deployment credentials and generated Secret manifests
+deploy/.env
+deploy/.generated
+deploy/.prepare-*
+deploy/*.kubeconfig

@@ -1,26 +1,3 @@
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: release-readiness
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: release-readiness-data
-spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: release-readiness-trusted-ca
-  labels:
-    config.openshift.io/inject-trusted-cabundle: 'true'
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,44 +19,46 @@ spec:
       serviceAccountName: release-readiness
       containers:
       - name: dashboard
-        image: quay.io/nasonawa/release-readness:v2.2@sha256:e4a1fee6e680fbfcfb0c53ecef2c674ec7eeece5ffa0e6f4ed7814c14cfaacd6
+        image: release-readiness:configured
         imagePullPolicy: Always
         args:
-        - -addr
-        - :8080
-        - -db
-        - /data/release-readiness.db
-        - -prow-interval
-        - 2m
+        - -addr=:8080
+        - -db=/data/release-readiness.db
         - -jira-write=false
+        - -art-build-history-url=$(ART_BUILD_HISTORY_URL)
+        - -art-fbc-quay-url=$(ART_FBC_QUAY_URL)
+        - -tekton-results-url=$(TEKTON_RESULTS_URL)
+        - -catalog-url=$(CATALOG_URL)
+        - -gitlab-url=$(GITLAB_URL)
+        - -shipment-project=$(SHIPMENT_PROJECT)
+        - -ocp-build-data-url=$(OCP_BUILD_DATA_URL)
+        - -prow-interval=$(PROW_INTERVAL)
+        - -jira-poll-interval=$(JIRA_POLL_INTERVAL)
+        - -konflux-poll-interval=$(KONFLUX_POLL_INTERVAL)
+        - -gitlab-poll-interval=$(GITLAB_POLL_INTERVAL)
+        - -ci-workers=$(CI_WORKERS)
+        - -jira-workers=$(JIRA_WORKERS)
+        - -art-workers=$(ART_WORKERS)
+        - -ci-stream-budget=$(CI_STREAM_BUDGET)
+        - -ci-candidate-lookback=$(CI_CANDIDATE_LOOKBACK)
+        - -prow-history-interval=$(PROW_HISTORY_INTERVAL)
+        - -prow-history-budget=$(PROW_HISTORY_BUDGET)
+        - -prow-live-refresh-interval=$(PROW_LIVE_REFRESH_INTERVAL)
+        - -prow-inventory-interval=$(PROW_INVENTORY_INTERVAL)
+        - -art-current-budget=$(ART_CURRENT_BUDGET)
+        - -art-history-interval=$(ART_HISTORY_INTERVAL)
+        - -art-history-budget=$(ART_HISTORY_BUDGET)
+        - -retention=$(RETENTION)
         envFrom:
+        - configMapRef:
+            name: release-readiness-config
         - secretRef:
-            name: release-readiness-jira
+            name: release-readiness-credentials
         env:
         - name: KUBECONFIG
           value: /etc/konflux/kubeconfig
-        - name: KONFLUX_NAMESPACE
-          value: art-quay-tenant
-        - name: JIRA_WRITE
-          value: 'false'
-        - name: GITHUB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: release-readiness-github
-              key: token
-              optional: true
-        - name: GITLAB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: release-readiness-gitlab
-              key: token
-              optional: true
         - name: SSL_CERT_FILE
           value: /etc/pki/ca-trust-injected/ca-bundle.crt
-        - name: PROW_JOB_DISCOVERY
-          value: 'true'
-        - name: SIPPY_URL
-          value: https://sippy.dptools.openshift.org
         ports:
         - name: http
           containerPort: 8080
@@ -119,6 +98,12 @@ spec:
           limits:
             cpu: '1'
             memory: 1Gi
+        startupProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          periodSeconds: 5
+          failureThreshold: 30
       volumes:
       - name: data
         persistentVolumeClaim:
@@ -129,29 +114,4 @@ spec:
       - name: trusted-ca
         configMap:
           name: release-readiness-trusted-ca
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: release-readiness
-spec:
-  selector:
-    app: release-readiness
-  ports:
-  - name: http
-    port: 8080
-    targetPort: http
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: release-readiness
-spec:
-  to:
-    kind: Service
-    name: release-readiness
-  port:
-    targetPort: http
-  tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect
+      automountServiceAccountToken: false
