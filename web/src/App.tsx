@@ -41,9 +41,6 @@ import "./theme.css";
 
 const ReleasePortfolio = lazy(() => import("./pages/ReleasePortfolio"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
-// Dev builds only: the condition is false in a production build, so the
-// mockups chunk is never emitted.
-const Mockups = import.meta.env.DEV ? lazy(() => import("./mockups")) : null;
 
 const glossary: [string, string][] = [
 	[
@@ -244,7 +241,6 @@ function AppRoutes() {
 						path="/releases/:version/snapshots"
 						element={<Navigate to=".." relative="path" replace />}
 					/>
-					{Mockups && <Route path="/mockups/*" element={<Mockups />} />}
 				</Routes>
 			</Suspense>
 		</ErrorBoundary>

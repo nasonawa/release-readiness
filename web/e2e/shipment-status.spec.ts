@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { validation } from "./fixtures/portfolio.ts";
 import { captureFullPage } from "./helpers/screenshots.ts";
 
 const version = "quay-v3.18.1";
@@ -58,6 +59,12 @@ async function mockRelease(
 	);
 	await page.route(`**/api/v1/releases/${version}/ci`, (route) =>
 		route.fulfill({ json: [] }),
+	);
+	await page.route("**/api/v1/releases/overview*", (route) =>
+		route.fulfill({ json: [] }),
+	);
+	await page.route(`**/api/v1/releases/${version}/validation`, (route) =>
+		route.fulfill({ json: validation }),
 	);
 }
 

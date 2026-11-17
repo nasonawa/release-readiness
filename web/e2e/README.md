@@ -56,10 +56,13 @@ npm run shots -- --route '**/api/v1/releases/quay-v3.18.1/candidate=/tmp/candida
   http://localhost:8089 ./test-results/shots /releases/quay-v3.18.1
 ```
 
-Mockups remain dev-only routes in `src/mockups/index.tsx`. Start a dev frontend
-against a local backend with `RR_API_TARGET=http://127.0.0.1:8088 npm run dev --
---port 5174 --strictPort`, then point `shots` at `http://localhost:5174` and the
-chosen `/mockups/<path>`.
+To review the frontend against a local backend, start it with:
+
+```bash
+RR_API_TARGET=http://127.0.0.1:8088 npm run dev -- --port 5174 --strictPort
+```
+
+Then point `shots` at `http://localhost:5174` and the release route to capture.
 
 ## Accessibility diagnostics
 
