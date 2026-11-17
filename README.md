@@ -168,6 +168,8 @@ cd web && npm run dev
 
 ### Deployment
 
+Use [the OpenShift Kustomize setup](deploy/README.md) to configure and deploy the full application with `oc`, a deployment `.env`, and local credential files.
+
 `deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases, and get/list on `results.tekton.dev` results and records for the CVE scan counts. The Role and RoleBinding must live in the Konflux namespace the app reads.
 
 ### Upgrading
@@ -176,9 +178,9 @@ The schema changed when the Konflux source moved to Kubernetes. Delete the old S
 
 ## v2 portfolio and validation
 
-For the v2.0 image, OpenShift manifests, operator-run Secret commands, and image updates, see [the v2 OpenShift setup guide](deploy/v2/README.md).
+For current OpenShift deployment and credential setup, see [the Kustomize guide](deploy/README.md). v2.2 is the current v2 release.
 
-The `v2.0` UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
+The v2 UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
 
 `GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. With `-prow-job-discovery` (`PROW_JOB_DISCOVERY=true`), the app imports release periodics from both `ci-operator/jobs/quay/quay` and `ci-operator/jobs/quay/quay-operator`, pinned to one openshift/release commit. The complete inventory is stored in SQLite and published atomically. Jobs with no runs remain required. Only current periodic jobs define coverage; removed definitions remain in SQLite for audit but no longer count as configured requirements. Failed or partial imports preserve the last good inventory. Discovery does not read `_generator/matrix.yaml`, generated ci-operator configs, or the old generator-derived JSON snapshot. `-validation-plan` is ignored in discovery mode and remains available only for legacy ingestion. A complete inventory with no jobs for a stream produces “No CI configured” on its card and workbench; an inventory that has never loaded is shown as unavailable. Zero jobs never establishes readiness. No run status is embedded in the plan.
 
@@ -202,11 +204,11 @@ flowchart LR
     C --> U
 ```
 
-The plan establishes the expected denominator; it does not enable Prow ingestion. Configure `PROW_JOBS` or `PROW_JOB_PATTERN` separately. Exact-FBC identity is currently the supported gating adapter. Standalone/image-only jobs stay awaiting evidence until their image-identity adapter is implemented. Plans for OMR and newly added streams must be supplied explicitly. The UI distinguishes missing historical FBC records or stream fallback FBCs from confirmed release-specific publication.
+Dynamic periodic discovery establishes the expected denominator and schedules CI ingestion for matching release candidates. Streams without matching configured periodics show “No CI configured.” The optional legacy `-validation-plan` mode requires an operator-supplied plan and separate `PROW_JOBS` or `PROW_JOB_PATTERN` configuration. Exact-FBC identity is the supported gating adapter; standalone/image-only jobs need suitable image-identity evidence. The UI distinguishes missing historical FBC records or stream fallback FBCs from confirmed release-specific publication.
 
 ### Local v2 Compose review
 
-`compose.yaml` builds the embedded SPA and Go server together using `deploy/Containerfile`, binds only to localhost, mounts the reviewed validation plan, and forces `JIRA_WRITE=false`. Provide `.env` with the read credentials described above (an empty file is valid, but a fresh DB will have no releases without JIRA). The mounted kubeconfig must point to Konflux with the read permissions listed above. Nothing is deployed to OpenShift.
+`compose.yaml` builds the embedded SPA and Go server together using `deploy/Containerfile`, binds only to localhost, discovers validation coverage from Prow periodic job configurations, and forces `JIRA_WRITE=false`. Provide `.env` with the read credentials described above (an empty file is valid, but a fresh DB will have no releases without JIRA). The mounted kubeconfig must point to Konflux with the read permissions listed above. Nothing is deployed to OpenShift.
 
 ```bash
 # 8089 allows the previous 8088 app to remain available for comparison.
