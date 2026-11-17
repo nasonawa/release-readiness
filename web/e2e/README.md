@@ -118,5 +118,5 @@ the image. Titles and badge labels are rendered as text. Input images must be PN
 image decoding is awaited before capture. Several specs can be passed together.
 This is a manual review compositor, not a pixel-diff assertion or baseline updater.
 
-Historical captures are preserved under `docs/design-history/`; they are not test
-baselines. Only intentionally reviewed visual baselines should be added to tests.
+Historical design captures remain available in Git history. Only intentionally
+reviewed visual baselines should be added to tests.
