@@ -166,6 +166,14 @@ KUBECONFIG=<path> go run ./cmd/release-readiness -addr :8088 -db /tmp/rr.db
 cd web && npm run dev
 ```
 
+### Frontend browser tests and visual review
+
+See [the Playwright guide](web/e2e/README.md) for browser tests and the TypeScript
+`shots`, `a11y`, and `compare` commands. These share the frontend's npm/Chromium
+installation; Python Playwright is no longer needed. Tests use mocked APIs and
+run without the backend. The separate [Sippy/GCS mock comparison](internal/prow/testdata/sippy-experiment/README.md)
+remains a Go test workflow.
+
 ### Deployment
 
 Use [the OpenShift Kustomize setup](deploy/README.md) to configure and deploy the full application with `oc`, a deployment `.env`, and local credential files.
