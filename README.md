@@ -50,8 +50,9 @@ Do not add `--volumes` unless you intend to delete its data.
 
 ## Deploy to OpenShift
 
-Use an image built from the current code. The default release tag is
-`quay.io/nasonawa/release-readness:v2.2`. Follow the
+Use an image built from the current code. Replace `your-org` in the example
+`quay.io/your-org/release-readiness:v2.2` with your registry organization, and
+`your-namespace` with your target OpenShift project. Follow the
 [deployment guide](deploy/README.md) for credentials, cluster selection, storage,
 and access controls. In the intended application-cluster context:
 
@@ -60,10 +61,10 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 # Fill the supported settings and credential paths in deploy/.env.
 python3 deploy/configure.py
-oc project nasonawa  # Match NAMESPACE in deploy/.env.
+oc project your-namespace  # Match NAMESPACE in deploy/.env.
 oc apply -k deploy/.generated
-oc -n nasonawa rollout status deployment/release-readiness --timeout=300s
-oc -n nasonawa get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
+oc -n your-namespace rollout status deployment/release-readiness --timeout=300s
+oc -n your-namespace get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
 The deployment includes the app, persistent storage, Service, TLS Route, and
@@ -85,7 +86,7 @@ To build a container image:
 
 ```bash
 podman build -f deploy/Containerfile --build-arg APP_VERSION=v2.2 \
-  -t quay.io/nasonawa/release-readness:v2.2 .
+  -t quay.io/your-org/release-readiness:v2.2 .
 ```
 
 Building does not publish the image. Use a unique tag or digest for reproducible

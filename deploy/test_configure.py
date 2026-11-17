@@ -20,7 +20,7 @@ class ConfigureTests(unittest.TestCase):
                         ignore=shutil.ignore_patterns('.generated', '.env', '*.kubeconfig', '__pycache__', '.prepare-*'))
         self.env = self.root / '.env'
         (self.root / 'reader.yaml').write_text('apiVersion: v1\nkind: Config\n')
-        self.base = ('NAMESPACE=nasonawa\nIMAGE=quay.io/example/readiness:test\n'
+        self.base = ('NAMESPACE=your-namespace\nIMAGE=quay.io/example/readiness:test\n'
                      'JIRA_EMAIL=test@example.invalid\nJIRA_TOKEN=fake$jira#token\n'
                      'GITLAB_TOKEN=fake-gitlab\nKONFLUX_KUBECONFIG=reader.yaml\n')
         self.env.write_text(self.base)
@@ -115,7 +115,7 @@ class ConfigureTests(unittest.TestCase):
         self.assertIn(pod['imagePullSecrets'][0]['name'], secrets)
         maps = {d['metadata']['name'] for d in docs if d['kind'] == 'ConfigMap'}
         self.assertIn(container['envFrom'][0]['configMapRef']['name'], maps)
-        self.assertTrue(all(d['metadata']['namespace'] == 'nasonawa' for d in docs))
+        self.assertTrue(all(d['metadata']['namespace'] == 'your-namespace' for d in docs))
         self.assertFalse(pod['automountServiceAccountToken'])
         self.env.write_text(self.env.read_text().replace('fake$jira#token', 'rotated-fake-token'))
         rotated = generate()
