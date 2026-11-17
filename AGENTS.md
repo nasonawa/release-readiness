@@ -9,8 +9,9 @@ an embedded React/PatternFly SPA, backed by SQLite. Background sync loops read
 Konflux Snapshots and Releases through the Kubernetes API, ART build history,
 FBC images, the Red Hat container catalog, Prow periodics, CVE scans from
 Tekton Results, and JIRA issues per release; one binary serves the REST API
-(`/api/v1/`) and the SPA. `README.md` is the reference for what each source
-ingests and what the API fields mean.
+(`/api/v1/`) and the SPA. `README.md` covers setup, building, and testing;
+`docs/` contains the architecture, source synchronization, release semantics,
+and CLI reference.
 
 ## Build, test, lint
 
@@ -99,7 +100,8 @@ comparison tools (see `web/e2e/README.md`). Run `npm run typecheck:e2e` and
 | `internal/syncstatus/` | Per-source last success and failure tracking |
 | `internal/model/` | Shared data types |
 | `web/` | React 19 + TypeScript SPA, PatternFly 6, Vite 8; API client `web/src/api/client.ts`, pages in `web/src/pages/` |
-| `deploy/` | Kubernetes manifests (Deployment, Service, Route, PVC, RBAC) and `Containerfile` |
+| `deploy/` | OpenShift Kustomize base/generator, RBAC, and `Containerfile` |
+| `docs/` | Architecture, release workflow, synchronization, and CLI reference |
 | `web/e2e/` | Browser tests, shared fixtures/helpers, and TypeScript review tools |
 | `.github/workflows/` | CI: Go lint+test, web lint+build, image build; sqlc diff |
 | `.tekton/` | Konflux pipeline definitions |
@@ -154,8 +156,8 @@ upgrade in place.
 - `deploy/rbac.yaml`'s Role and RoleBinding must live in the Konflux namespace
   the app reads; they grant list on Snapshots and Releases and get/list on
   Tekton Results `results` and `records`.
-- The SQLite DB is persisted on the PVC. Delete the old DB file when upgrading
-  across the move to the Kubernetes source.
+- The SQLite DB is persisted on the PVC. Back it up before upgrades; supported
+  databases migrate in place. Do not delete it as a routine upgrade step.
 
 ## Conventions
 
