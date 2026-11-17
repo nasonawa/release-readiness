@@ -23,20 +23,24 @@ Edit `deploy/.env`:
 
 - `IMAGE`: full image reference with an explicit tag or digest.
 - `NAMESPACE`: target OpenShift project (default `nasonawa`).
-- `JIRA_EMAIL` and `JIRA_TOKEN` (or `JIRA_TOKEN_FILE`): read credentials.
-- `GITLAB_TOKEN` (or `GITLAB_TOKEN_FILE`): read access to shipment MRs.
-  Set `GITLAB_URL=` to disable this integration instead.
+- `JIRA_EMAIL` and `JIRA_TOKEN`: read credentials.
+- `GITLAB_TOKEN`: required read access to shipment MRs.
 - `KONFLUX_KUBECONFIG`: path to a self-contained Konflux reader kubeconfig.
-- Optional `GITHUB_TOKEN` / `GITHUB_TOKEN_FILE` for GitHub rate limits.
+- Optional `GITHUB_TOKEN` for GitHub rate limits.
 - Optional `IMAGE_PULL_SECRET_FILE`: Docker/Podman auth JSON for a private image.
 - Optional `ROUTE_HOST`, `STORAGE_CLASS`, `STORAGE_SIZE` (default `5Gi`).
 
-Every setting in [base/app.env](base/app.env) can also be overridden in `deploy/.env`:
-source URLs, ART groups, project, worker counts, poll intervals, lookback, and
-history budgets. `PROW_JOB_DISCOVERY=true` and `JIRA_WRITE=false` are enforced.
-Use a dedicated deployment env file rather than passing an unrelated Compose
-`.env`: unknown keys are rejected. Existing credentials can be copied into this
-file or referenced via token files; files contain only the token.
+[.env.example](.env.example) is the complete set of supported deployment inputs.
+The script rejects keys absent from this template, including token-file variables
+and source/worker overrides. Omitted keys use the template defaults; required
+credentials and the Konflux kubeconfig path must be filled in. API tokens are
+supplied inline, while the kubeconfig and optional image-pull auth use file paths.
+
+Source URLs, ART groups, project, worker counts, poll intervals, lookback, and
+history budgets remain internal defaults in [base/app.env](base/app.env).
+`PROW_JOB_DISCOVERY=true` and `JIRA_WRITE=false` remain enforced. No second
+application env file needs to be prepared. Use a dedicated deployment `.env`
+rather than passing an unrelated Compose env file with additional keys.
 
 The parser accepts `KEY=value`, comments on separate lines, and optional matching
 quotes. It does **not** execute shell code, expand variables, or interpret escapes.
