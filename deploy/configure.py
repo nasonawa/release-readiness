@@ -11,9 +11,6 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 TOKENS = ('JIRA_TOKEN', 'GITLAB_TOKEN', 'GITHUB_TOKEN')
-CONTROLS = {'NAMESPACE', 'IMAGE', 'ROUTE_HOST', 'STORAGE_CLASS', 'STORAGE_SIZE',
-            'KONFLUX_KUBECONFIG', 'IMAGE_PULL_SECRET_FILE', 'JIRA_EMAIL', *TOKENS,
-            *(key + '_FILE' for key in TOKENS)}
 
 
 def dotenv(path):
@@ -44,31 +41,29 @@ def read_file(value, env_path):
 
 
 def prepare(env_path):
-    defaults = dotenv(ROOT / 'base' / 'app.env')
-    values = dotenv(env_path)
-    unknown = values.keys() - (defaults.keys() | CONTROLS)
+    # The public template defines the complete configuration interface.
+    defaults = dotenv(ROOT / '.env.example')
+    supplied = dotenv(env_path)
+    unknown = supplied.keys() - defaults.keys()
     if unknown:
         raise ValueError('Unknown settings: ' + ', '.join(sorted(unknown)))
-    settings = defaults | {k: v for k, v in values.items() if k in defaults}
+    values = defaults | supplied
+    settings = dotenv(ROOT / 'base' / 'app.env')
     if settings['PROW_JOB_DISCOVERY'] != 'true' or settings['JIRA_WRITE'] != 'false':
         raise ValueError('This deployment requires Prow discovery and read-only JIRA')
-    namespace = values.get('NAMESPACE', 'nasonawa')
+    namespace = values['NAMESPACE']
     if len(namespace) > 63 or not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?', namespace):
         raise ValueError('NAMESPACE must be a DNS label')
     image = values.get('IMAGE', '')
     if not image or any(c.isspace() for c in image) or '/' not in image:
         raise ValueError('IMAGE must name a registry image built from the current branch')
     credentials = {'JIRA_EMAIL': values.get('JIRA_EMAIL', '')}
-    for key in TOKENS:
-        value, filename = values.get(key, ''), values.get(key + '_FILE', '')
-        if value and filename:
-            raise ValueError(f'Set only {key} or {key}_FILE')
-        credentials[key] = read_file(filename, env_path).decode().rstrip('\r\n') if filename else value
+    credentials.update({key: values[key] for key in TOKENS})
     for key in ('JIRA_EMAIL', 'JIRA_TOKEN'):
         if not credentials[key]:
             raise ValueError(f'{key} is required for release discovery')
     if settings['GITLAB_URL'] and not credentials['GITLAB_TOKEN']:
-        raise ValueError('GITLAB_TOKEN is required; set GITLAB_URL empty to disable shipment lookup')
+        raise ValueError('GITLAB_TOKEN is required for shipment lookup')
     for key, value in (settings | credentials).items():
         if any(c in value for c in ('\n', '\r', '\x00')):
             raise ValueError(f'{key} must be a single line')
@@ -80,7 +75,7 @@ def prepare(env_path):
     kubeconfig = read_file(values['KONFLUX_KUBECONFIG'], env_path)
     if not kubeconfig.strip():
         raise ValueError('KONFLUX_KUBECONFIG is empty')
-    size = values.get('STORAGE_SIZE', '5Gi')
+    size = values['STORAGE_SIZE']
     if not re.fullmatch(r'[1-9][0-9]*(?:Mi|Gi|Ti)', size):
         raise ValueError('STORAGE_SIZE must be a positive quantity such as 5Gi')
     pvc = {'apiVersion': 'v1', 'kind': 'PersistentVolumeClaim',
@@ -98,7 +93,6 @@ def prepare(env_path):
     overlay = {'apiVersion': 'kustomize.config.k8s.io/v1beta1', 'kind': 'Kustomization',
         'namespace': namespace, 'resources': ['../base'],
         'images': [{'name': 'release-readiness', 'newName': image}],
-        'configMapGenerator': [{'name': 'release-readiness-config', 'behavior': 'merge', 'envs': ['app.env']}],
         'secretGenerator': [
             {'name': 'release-readiness-credentials', 'envs': ['credentials.env']},
             {'name': 'release-readiness-konflux', 'files': ['kubeconfig=konflux.kubeconfig']}],
@@ -111,8 +105,7 @@ def prepare(env_path):
         image_spec['newName'], image_spec['newTag'] = image.rsplit(':', 1)
     else:
         raise ValueError('IMAGE must include an explicit tag or digest')
-    files = {'app.env': ''.join(f'{k}={v}\n' for k, v in settings.items()).encode(),
-             'credentials.env': ''.join(f'{k}={v}\n' for k, v in credentials.items()).encode(),
+    files = {'credentials.env': ''.join(f'{k}={v}\n' for k, v in credentials.items()).encode(),
              'konflux.kubeconfig': kubeconfig}
     if values.get('IMAGE_PULL_SECRET_FILE'):
         auth = read_file(values['IMAGE_PULL_SECRET_FILE'], env_path)

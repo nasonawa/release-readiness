@@ -28,18 +28,20 @@ class ConfigureTests(unittest.TestCase):
         self.root_patch.start()
         self.addCleanup(self.root_patch.stop)
 
-    def test_token_files_and_literal_shell_text(self):
-        (self.root / 'jira-token').write_text('fake$(touch /tmp/not-executed)\n')
-        self.env.write_text(self.base.replace('JIRA_TOKEN=fake$jira#token', 'JIRA_TOKEN_FILE=jira-token'))
+    def test_inline_tokens_are_literal(self):
+        self.env.write_text(self.base.replace('fake$jira#token', 'fake$(touch /tmp/not-executed)'))
         files = configure.prepare(self.env)
         self.assertIn(b'JIRA_TOKEN=fake$(touch /tmp/not-executed)\n', files['credentials.env'])
-        self.assertNotIn(b'JIRA_TOKEN', files['app.env'])
+        self.assertNotIn('app.env', files)
+        self.assertNotIn('configMapGenerator', json.loads(files['kustomization.yaml']))
 
     def test_invalid_inputs_rejected(self):
         for change in ('JIRA_TOKEN_FILE=reader.yaml\n', 'UNRECOGNIZED=value\n',
                        'JIRA_WRITE=true\n', 'PROW_JOB_DISCOVERY=false\n',
                        'STORAGE_SIZE=-1Gi\n', 'ROUTE_HOST=https://invalid\n',
-                       'CI_WORKERS="unterminated\n'):
+                       'CI_WORKERS=8\n', 'JIRA_API_URL=https://example.invalid\n',
+                       'GITLAB_URL=\n', 'GITHUB_TOKEN_FILE=token\n',
+                       'GITLAB_TOKEN_FILE=token\n', 'GITHUB_TOKEN="unterminated\n'):
             with self.subTest(change=change):
                 self.env.write_text(self.base + change)
                 with self.assertRaises(ValueError):
@@ -55,9 +57,24 @@ class ConfigureTests(unittest.TestCase):
         self.assertEqual(overlay['images'][0]['digest'], digest)
         self.assertEqual(overlay['images'][0]['newName'], 'quay.io/example/readiness')
 
-    def test_optional_gitlab_and_github(self):
-        self.env.write_text(self.base.replace('GITLAB_TOKEN=fake-gitlab', 'GITLAB_URL='))
+    def test_required_credentials_and_optional_github(self):
         self.assertIn(b'GITHUB_TOKEN=\n', configure.prepare(self.env)['credentials.env'])
+        for key in ('JIRA_EMAIL', 'JIRA_TOKEN', 'GITLAB_TOKEN', 'KONFLUX_KUBECONFIG'):
+            with self.subTest(key=key):
+                self.env.write_text('\n'.join(line for line in self.base.splitlines()
+                                              if not line.startswith(key + '=')))
+                with self.assertRaises(ValueError):
+                    configure.prepare(self.env)
+
+    def test_template_defaults(self):
+        template = configure.dotenv(self.root / '.env.example')
+        self.env.write_text('\n'.join(line for line in self.base.splitlines()
+                                      if not line.startswith(('NAMESPACE=', 'IMAGE='))))
+        overlay = json.loads(configure.prepare(self.env)['kustomization.yaml'])
+        self.assertEqual(overlay['namespace'], template['NAMESPACE'])
+        image = overlay['images'][0]
+        self.assertEqual(image['newName'] + ':' + image['newTag'], template['IMAGE'])
+
 
     def test_render_and_rotation(self):
         if not shutil.which('oc'):
