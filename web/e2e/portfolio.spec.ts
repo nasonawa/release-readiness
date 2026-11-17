@@ -358,3 +358,22 @@ test("observed CI success stays separate from selected-FBC readiness", async ({ 
 	await page.getByRole("combobox", {name:"CI result",exact:true}).selectOption("unmatched");
 	await expect(table.locator("tbody tr")).toHaveCount(2);
 });
+
+test("source freshness uses only the shared hook polling interval", async ({ page }) => {
+	await page.clock.install();
+	let requests = 0;
+	await page.route("**/api/v1/sync-status", (route) => {
+		requests++;
+		return route.fulfill({ json: { sources: [], problems: [] } });
+	});
+	await page.goto("/");
+	await expect(page.getByRole("heading", { name: "Release portfolio" })).toBeVisible();
+	await expect.poll(() => requests).toBeGreaterThan(0);
+	requests = 0;
+	await page.clock.runFor(30_000);
+	expect(requests).toBe(0);
+	await page.clock.runFor(30_000);
+	await expect.poll(() => requests).toBeGreaterThan(0);
+	// Desktop and compact masthead consumers each poll once per minute.
+	expect(requests).toBeLessThanOrEqual(2);
+});

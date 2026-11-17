@@ -2,10 +2,8 @@ package prow
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -32,16 +30,9 @@ func (s *Syncer) fetchIndexedRun(ctx context.Context, job JobDefinition, row Ind
 	if finData == nil {
 		return run, nil // no fabricated completion time or terminal success
 	}
-	var fin finished
-	if err := json.Unmarshal(finData, &fin); err != nil {
+	if err := run.applyCompletion(finData); err != nil {
 		return nil, err
 	}
-	fin.Result = strings.ToUpper(strings.TrimSpace(fin.Result))
-	if fin.Timestamp <= 0 || !slices.Contains([]string{"SUCCESS", "FAILURE", "ERROR", "ABORTED"}, fin.Result) {
-		return nil, fmt.Errorf("invalid completion record")
-	}
-	completed := time.Unix(fin.Timestamp, 0).UTC()
-	run.State, run.CompletedAt = strings.ToLower(fin.Result), &completed
 	target := job.Target
 	var artifact []byte
 	if target != "" {

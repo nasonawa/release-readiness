@@ -5,7 +5,7 @@ import type {
 	ReleaseCandidate,
 	VerdictItem,
 } from "../api/types.ts";
-import { blockers, grouped, splitBlockers, where } from "./blockers.ts";
+import { blockers, grouped, where } from "./blockers.ts";
 
 const item = (i: Partial<VerdictItem>): VerdictItem => ({
 	level: "blocker",
@@ -49,24 +49,6 @@ test("an unknown code falls back to the item's text, with no action", () => {
 	assert.equal(b.what, "Something new");
 	assert.equal(b.action, "");
 	assert.equal(where(b), "Whole release");
-});
-
-test("splitBlockers keeps blockers apart from warnings and notes", () => {
-	const { blocking, rest } = splitBlockers(
-		of([
-			item({ code: "not_staged" }),
-			item({ level: "warning", code: "stream_ahead" }),
-			item({ level: "info", code: "unknown_fbc" }),
-		]),
-	);
-	assert.deepEqual(
-		blocking.map((b) => b.code),
-		["not_staged"],
-	);
-	assert.deepEqual(
-		rest.map((b) => b.code),
-		["stream_ahead", "unknown_fbc"],
-	);
 });
 
 const withOperator = (o: object, items: VerdictItem[]) =>

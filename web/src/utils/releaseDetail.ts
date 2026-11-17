@@ -60,20 +60,6 @@ const NIGHTLY = /-nightly(?=-|$)/;
 export const jobShortName = (job: string) =>
 	job.match(/e2e-install-(.+)$/)?.[1].replace(NIGHTLY, "") ?? job;
 
-/**
- * A job's name after "redhat-X.Y-" less "e2e-install-" and "-nightly":
- * aws-ocp422-aws-s3. Other jobs get their short name.
- */
-export const jobLabel = (job: string) =>
-	job
-		.match(/redhat-\d+\.\d+-(.+)$/)?.[1]
-		.replace("e2e-install-", "")
-		.replace(NIGHTLY, "") ?? jobShortName(job);
-
-export const jobLabels = (jobs: string[]) => jobs.map(jobLabel);
-
-const failedState = (s: string) => s === "failure" || s === "error";
-
 /** Each FBC of a slot, on the head bundle or not, of every operator. */
 const slotFBCs = (c: FBCCandidate) =>
 	c.operators.flatMap((o) => [...o.members, ...o.conflicts]);
@@ -95,15 +81,6 @@ export function fbcsBuilt(c: FBCCandidate): string {
 
 /** Whether an operator has an FBC, on the head bundle or not. */
 const hasFBC = (o: OperatorFBC) => o.members.length + o.conflicts.length > 0;
-
-/**
- * release-from-fbc's fbc-pullspecs, comma-separated, only for a complete
- * candidate; else null.
- */
-export const fbcPullspecs = (c: FBCCandidate): string | null =>
-	c.state === "complete" && c.pullspecs.length > 0
-		? c.pullspecs.join(",")
-		: null;
 
 /** Why a release candidate cannot yet offer FBC pullspecs. */
 export const fbcPullspecsReason = (
@@ -411,12 +388,6 @@ function fbcStage(r: KonfluxRelease): StatusLine {
 		text: r.completion_time ? `Staged ${day(r.completion_time)}` : "Staged",
 	};
 }
-
-/** Whether a row has something to act on: a failed stage, a flag or a failed run. */
-export const needsAttention = (r: FbcRow) =>
-	r.stage?.status === "failed" ||
-	r.flags.length > 0 ||
-	r.runs.some((p) => failedState(p.state));
 
 const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 

@@ -157,17 +157,6 @@ export function grouped(bs: Blocker[]): BlockerGroup[] {
 	return [...out.values()];
 }
 
-/** Grouped blockers, and grouped warnings and notes. */
-export function splitBlockers(bs: Blocker[]): {
-	blocking: BlockerGroup[];
-	rest: BlockerGroup[];
-} {
-	return {
-		blocking: grouped(bs.filter((b) => b.level === "blocker")),
-		rest: grouped(bs.filter((b) => b.level !== "blocker")),
-	};
-}
-
 /** Where a blocker is: "container-security-operator · OCP 4.17, 4.21". */
 export const where = (b: Blocker) =>
 	[b.operator || "Whole release", b.ocps.length && `OCP ${b.ocps.join(", ")}`]

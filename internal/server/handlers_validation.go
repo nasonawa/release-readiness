@@ -17,9 +17,10 @@ func (s *Server) validation(app string, candidate *model.ReleaseCandidate, runs 
 	if s.InventoryPlans != nil {
 		required = append(required, "prow-inventory")
 	}
+	sources := s.syncStatus.Sources()
 	for _, name := range required {
 		found := false
-		for _, source := range s.syncStatus.Sources() {
+		for _, source := range sources {
 			if source.Source == name && source.LastSuccess != nil {
 				found = true
 			}

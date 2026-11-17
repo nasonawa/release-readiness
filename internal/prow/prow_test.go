@@ -575,3 +575,33 @@ func TestSyncRetentionInterruptedWalk(t *testing.T) {
 		t.Errorf("stored runs after the next pass = %v, want all 4", slices.Collect(maps.Keys(store.runs)))
 	}
 }
+
+func TestApplyCompletion(t *testing.T) {
+	for _, tc := range []struct {
+		name, data, state string
+		valid             bool
+	}{
+		{"success", `{"timestamp":1700000000,"result":"SUCCESS"}`, "success", true},
+		{"failure", `{"timestamp":1700000000,"result":" failure "}`, "failure", true},
+		{"error", `{"timestamp":1700000000,"result":"Error"}`, "error", true},
+		{"aborted", `{"timestamp":1700000000,"result":"ABORTED"}`, "aborted", true},
+		{"unknown", `{"timestamp":1700000000,"result":"UNKNOWN","passed":true}`, "", false},
+		{"no timestamp", `{"result":"SUCCESS"}`, "", false},
+		{"negative timestamp", `{"timestamp":-1,"result":"SUCCESS"}`, "", false},
+		{"malformed", `{`, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run := Run{State: "running"}
+			err := run.applyCompletion([]byte(tc.data))
+			if !tc.valid {
+				if err == nil || run.State != "running" || run.CompletedAt != nil {
+					t.Fatalf("invalid record changed run: %+v, error: %v", run, err)
+				}
+				return
+			}
+			if err != nil || run.State != tc.state || run.CompletedAt == nil || run.CompletedAt.Unix() != 1700000000 {
+				t.Fatalf("incorrect completion: %+v, error: %v", run, err)
+			}
+		})
+	}
+}
