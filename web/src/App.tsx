@@ -39,7 +39,7 @@ import { useConfig } from "./hooks/useConfig";
 import "./readiness.css";
 import "./theme.css";
 
-const ReleasesOverview = lazy(() => import("./pages/ReleasePortfolio"));
+const ReleasePortfolio = lazy(() => import("./pages/ReleasePortfolio"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 // Dev builds only: the condition is false in a production build, so the
 // mockups chunk is never emitted.
@@ -237,7 +237,7 @@ function AppRoutes() {
 				}
 			>
 				<Routes>
-					<Route path="/" element={<ReleasesOverview />} />
+					<Route path="/" element={<ReleasePortfolio />} />
 					<Route path="/releases/:version" element={<ReleaseDetail />} />
 					<Route path="/releases/:version/ci" element={<CIRedirect />} />
 					<Route

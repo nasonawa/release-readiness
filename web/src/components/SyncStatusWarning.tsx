@@ -20,17 +20,8 @@ const POLL_MS = 60_000;
 
 /** The sync status, polled; every caller shares the one cache entry. */
 export function useSyncStatus() {
-	// The TTL sits under the poll period so every tick refetches.
-	const { data, refetch } = useCachedFetch(
-		"sync-status",
-		getSyncStatus,
-		POLL_MS / 2,
-	);
-
-	useEffect(() => {
-		const id = setInterval(refetch, POLL_MS);
-		return () => clearInterval(id);
-	}, [refetch]);
+	// useCachedFetch owns polling; adding another timer duplicates requests.
+	const { data } = useCachedFetch("sync-status", getSyncStatus, POLL_MS);
 	return data;
 }
 

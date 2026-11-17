@@ -175,19 +175,27 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 		ArtifactState: ArtifactMissing,
 	}
 	if finData != nil {
-		var fin finished
-		if err := json.Unmarshal(finData, &fin); err != nil {
-			return nil, "", fmt.Errorf("parse finished.json: %w", err)
+		if err := r.applyCompletion(finData); err != nil {
+			return nil, "", err
 		}
-		fin.Result = strings.ToLower(strings.TrimSpace(fin.Result))
-		if fin.Timestamp <= 0 || !slices.Contains([]string{"success", "failure", "error", "aborted"}, fin.Result) {
-			return nil, "", fmt.Errorf("invalid completion record")
-		}
-		r.State = fin.Result
-		t := time.Unix(fin.Timestamp, 0).UTC()
-		r.CompletedAt = &t
 	}
 	return r, pj.target(), nil
+}
+
+// applyCompletion validates the authoritative terminal result shared by direct
+// GCS discovery and Sippy-indexed runs. Invalid records never imply success.
+func (r *Run) applyCompletion(data []byte) error {
+	var fin finished
+	if err := json.Unmarshal(data, &fin); err != nil {
+		return fmt.Errorf("parse finished.json: %w", err)
+	}
+	state := strings.ToLower(strings.TrimSpace(fin.Result))
+	if fin.Timestamp <= 0 || !slices.Contains([]string{"success", "failure", "error", "aborted"}, state) {
+		return fmt.Errorf("invalid completion record")
+	}
+	completed := time.Unix(fin.Timestamp, 0).UTC()
+	r.State, r.CompletedAt = state, &completed
+	return nil
 }
 
 // applyArtifact records tested-images.json on r and reports whether it saw a
