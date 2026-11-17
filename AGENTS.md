@@ -101,7 +101,6 @@ comparison tools (see `web/e2e/README.md`). Run `npm run typecheck:e2e` and
 | `web/` | React 19 + TypeScript SPA, PatternFly 6, Vite 8; API client `web/src/api/client.ts`, pages in `web/src/pages/` |
 | `deploy/` | Kubernetes manifests (Deployment, Service, Route, PVC, RBAC) and `Containerfile` |
 | `web/e2e/` | Browser tests, shared fixtures/helpers, and TypeScript review tools |
-| `docs/design-history/` | Historical screenshots and recordings, not test baselines |
 | `.github/workflows/` | CI: Go lint+test, web lint+build, image build; sqlc diff |
 | `.tekton/` | Konflux pipeline definitions |
 
