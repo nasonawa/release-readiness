@@ -1,11 +1,11 @@
-# OpenShift deployment with Kustomize (v2.2)
+# OpenShift deployment with Kustomize
 
 This setup deploys the backend and embedded UI, a persistent SQLite volume,
 Service, HTTPS Route, service account, injected trusted CA bundle, configuration,
 and credentials. It uses dynamic Prow periodic discovery; no static validation
 plan or generator matrix is required. JIRA writes are disabled.
 
-v2.2 is the current v2 release. The default image is
+The default release image is
 `quay.io/nasonawa/release-readness:v2.2`. Rebuild this tag from the **current branch**
 before deployment: the previously published image predates the worker-budget and
 ART-group flags. Preparing these files does not build an image or deploy anything.

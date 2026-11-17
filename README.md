@@ -1,305 +1,124 @@
 # Release Readiness Dashboard
 
-Tracks Konflux build snapshots and releases, and JIRA issues, across Quay release versions.
+A release-readiness dashboard for Red Hat Quay and OMR. It brings JIRA release
+scope, ART builds, Konflux promotion state, Prow CI evidence, and shipment merge
+requests into one place for engineering, product, and leadership teams.
 
-## Architecture
+The portfolio groups minor-version streams into cards and shows concrete patch
+releases in stages. Each release has a briefing, validation workbench, and issue
+scope. Validation distinguishes a job's outcome from evidence that it tested the
+selected FBC. The dashboard observes existing CI runs; it does not launch jobs
+or approve shipments.
 
-The Go backend collects source records in SQLite, then correlates them for the
-embedded React dashboard. ART and Konflux ingest independently. JIRA release
-tickets drive the shipment MR lookup; Prow configuration discovery stores only
-job metadata until a release has a dated FBC to validate.
+One Go binary serves the embedded React/PatternFly UI and API, with SQLite for
+persistence. Background collectors prioritize current releases over history.
 
-```mermaid
-flowchart TD
-    JIRA["JIRA release tickets and issues"] --> Releases[("Release versions and issues")]
-    Releases --> MRLookup["Find shipment MR for release"]
-    GitLab["GitLab shipment project"] --> MRLookup
-    MRLookup --> MRs[("Shipment MR status and references")]
+## Prerequisites
 
-    Groups["Configured ART_GROUPS"] --> ART["ART build history collector"]
-    ART --> FBCs[("FBC identities, versions and build dates")]
-    Konflux["Konflux Kubernetes API"] --> KubeSync["Snapshot and Release collector"]
-    KubeSync --> Promotion[("Component images and promotion outcomes")]
+- Podman with a Compose provider, or Docker Compose, for local containers.
+- Node.js 24 and the Go version specified in `go.mod` for source builds/tests.
+- JIRA read credentials for release discovery and a Konflux reader kubeconfig
+  for build/promotion data. GitLab read access enables private shipment MR lookup.
+- `oc` and Python 3.9+ for preparing the OpenShift Kustomize deployment.
 
-    Configs["openshift/release periodic job configs"] --> Inventory["Metadata-only inventory sync"]
-    Inventory --> Jobs[("Job names, targets and platform metadata")]
+## Run locally
 
-    Releases --> Match["Match release versions to dated FBCs and configured jobs"]
-    FBCs --> Match
-    Jobs --> Match
-    Match -->|"No eligible match"| Wait["Defer until a later background pass"]
-    Match -->|"Eligible match"| Queue["Schedule CI lookup with bounded time window"]
-    Queue --> Sippy["Sippy: find existing runs for the stream"]
-    Sippy --> Evidence["GCS: tested-images.json and completion evidence"]
-    Queue -.->|"Paced live-run fallback"| Evidence
-    Evidence --> Runs[("Cached CI results and tested FBC identities")]
-
-    Releases --> Correlate["Correlate selected FBC, CI evidence and shipment state"]
-    FBCs --> Correlate
-    Promotion --> Correlate
-    MRs --> Correlate
-    Jobs --> Correlate
-    Runs --> Correlate
-    Correlate --> API["REST API /api/v1/"]
-    API --> UI["Release portfolio, briefing and validation workbench"]
-```
-
-Database nodes represent tables in the same SQLite database. Catalog-content
-rendering, image resolution, CVE scans and publication checks enrich these records;
-the diagram focuses on the release and CI ingestion workflow.
-
-- CI lookup queries existing executions; it never launches Prow jobs.
-- The search window uses ART build start time minus a configurable lookback,
-  bounded by retention. The timestamp narrows the search; the artifact confirms identity.
-- A passing run with a different FBC digest remains visible with a warning and
-  does not pass the selected-FBC readiness gate.
-- Current releases take priority. Historical-only streams run afterward with
-  separate budgets. Source failures, stale data and idle collectors are tracked independently.
-
-## Syncing
-
-### Konflux sync (default: every 30s)
-
-Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their component images; releases are upserted. Each record's `created_at` is the resource's `creationTimestamp`.
-
-### JIRA sync (default: every 5m)
-
-Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues whose Target Version equals the release version (e.g. `quay-v3.16.2`).
-
-### Prow sync (default: every 15m, only when jobs or a job pattern are configured)
-
-Lists the runs of each `-prow-jobs` periodic, and of each job `-prow-job-pattern` matches among the job directories listed each pass, in the public `test-platform-results-public` GCS bucket and stores each run's state, Prow link and, once the run has finished, the images its `tested-images.json` names or, for a run without one (before 2026-10-09), the quay-operator, quay, clair, quay-builder and quay-builder-qemu images of the quay-operator CSV in its `olm-csvs.yaml`, the CSVs installed on the test cluster, each only when that CSV names a single digest of it. For a finished run that did not pass and whose `tested-images.json` does not list `subscription` as missing, it also reads the `finished.json` of the target's Quay install step (`quay-deploy-aws-s3`, `-odf`, `-azure-blob` or `-gcp-gcs`) and stores whether that step failed. A finished run is read once. A job with no stored runs is read newest first and stops at its first run that started before `-retention`, so a long-idle job does not backfill its history. A job maps to a Konflux application, so every z-stream of a minor (`quay-v3.18.1`, `quay-v3.18.2`) shows the same runs: a pattern-matched job's is `quay-<major>-<minor>` from the pattern's named groups (`redhat-3.18` -> `quay-3-18`), and a `-prow-jobs` entry for the same job overrides it. The deployment discovers the `periodic-ci-quay-quay-redhat-X.Y-...-nightly` install periodics by pattern.
-
-A run's `tested-images.json` also records the FBC catalog it installed from (`catalog.resolved_ref`); the release candidate counts a run for the FBC of that digest. An `olm-csvs.yaml` run records no catalog and counts for no FBC.
-
-### ART build history sync (every 10m, with `-art-build-history-url`)
-
-For each explicitly configured ART group (`-art-groups` / `ART_GROUPS`, for example `quay-3.18,quay-5.0`), lists ART's successful FBC builds day by day: the newest 3 days every pass and up to 7 older unscanned days, back 120 days. An FBC is stored once the bundle it holds and the operator and operand images that bundle deploys are stored. A day listing at the 1000-row search cap is split by build name, the operators' FBC names and any the listing shows; a name that alone reaches the cap, or a search warning, is a sync error and the day is scanned again.
-
-ART history does not require Konflux snapshots, JIRA releases or Prow definitions to discover its groups. Empty group configuration reports waiting without claiming a successful scan. JIRA/catalog lifecycle metadata only sets priority; missing priority metadata leaves configured groups active. Compose supplies the Quay group list through `RR_ART_GROUPS`.
-
-### FBC render (every 10m, with `-art-build-history-url`)
-
-Reads up to 20 FBC images a pass anonymously from their registry (Registry v2 API): the catalogs of staged FBC Snapshots, then the newest ART FBC build of each operator, version and OCP version. It keeps, by digest, the image's `com.redhat.art.nvr` label and the head bundle of its `stable-X.Y` channel; a failed read is retried after an hour, except one whose catalog has no `stable-X.Y` channel: the digest pins the catalog, so that read is never retried. Each head bundle is joined to its ART bundle build, read from ART build history when not yet stored.
-
-### FBC JIRA reconciler (every 10m, with `-art-build-history-url`)
-
-For each successful ART FBC build in a `quay-X.Y` group, of any stream `X.Y`, whose NVR carries an `X.Y.Z` version, finds the PROJQUAY issues the FBC fixes and stores them as actions for the JIRA writer. FBCs are grouped by stream, operator and OCP version; the newest FBC of a group when first seen is its baseline and proposes nothing. Each later FBC is compared with the one before: for each member image whose digest changed and whose ART build is an allowlisted component from its listed repository, the commits between the two builds' commits on the stream's branch (`redhat-X.Y`; for Clair, the one `release-*` branch whose head is each commit, else that contains it, the same for both, or the FBC is uncertain) are read from the GitHub compare API, and each PROJQUAY key in their subject lines is `proposed` for `quay-vX.Y.Z`, or `skipped` when an earlier FBC of the stream already included it. Anything that keeps an FBC's fixes from being known (such as a component not allowlisted, a GitHub error other than a rate limit, 5xx or network error, a revert of a key, a missing ART source, an FBC rendered after a later one was reconciled) is logged as the FBC's uncertainty instead. An FBC with no group (not one ART name, or a failed render) proposes nothing and is logged as uncertain, and so is the next FBC of its stream, operator and OCP version, whose diff would take its fixes. A build not rendered that a later build of the same operator, version and OCP version supersedes, and that ART did not stage, is never rendered and is skipped: the next build of its slot takes its fixes. Any other FBC whose catalog is not rendered yet, or whose ART source records are not yet checked, or not yet stored within 6 hours of its build starting, or whose GitHub read hit a rate limit, 5xx or network error, waits and is retried next pass, and so do the FBCs after it. `-github-token` reads GitHub authenticated; without it the 60-requests-an-hour anonymous limit applies. Actions are not pruned by `-retention`. Its sync status is `reconcile`.
-
-### FBC JIRA writer (off until `-jira-write`)
-
-After each reconcile pass, applies the proposed actions to their PROJQUAY issues, re-reading each issue before every step: replaces the stream's `quay-vX.Y.z` Target Version with the release's `quay-vX.Y.Z` (keeping every other Target Version, and skipping the issue when that version is missing, archived or released), moves a MODIFIED, ON_QA or Verified issue to Release Pending by a direct transition only, recording an error when none is offered (an issue already there, e.g. moved by release-tool, is never transitioned, and any other status is left alone), then comments "This fix is in ART FBC build `<NVR>` for `quay-vX.Y.Z`." with links to the ART build pages of the FBC and of the quay container in it, once: an issue whose comments carry that FBC build link, or the marker of the earlier comment text, is not commented again. Each step's result is stored on the action, so a failed one is retried alone, up to 5 attempts. It stays off until `-jira-write` is true and its own credential (`-jira-write-email`, `-jira-write-token`), never the read one, is set. Setting `-jira-write` false is the clean stop; revoking that token also stops every write without touching the read sync, but each pass then spends an attempt of every pending action, which stays in error after 5 passes.
-
-### Sync status
-
-`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `reconcile`, `catalog`, `prow`, `image-scans`, `shipment-mrs`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the masthead shows "Updated N ago" and "N sources stale" on every page, icon-only at narrow widths (image-scans only while CVEs are shown).
-
-## Release view
-
-Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
-
-A Quay version's builds are its application's stream Snapshots (not ART's assemblies or `fbc-ri-*` re-releases) whose images, base image excluded, carry that version in the NVR ART build history resolved for them: `quay-quay-container-3.18.1-...` is 3.18.1. Unresolved images do not count, a build carrying two versions, as while ART switches the stream, is of none, and a build counts only if ART built no lower version after it.
-
-`/api/v1/releases/{version}/candidate` returns the version's operator FBCs up for release in `fbc_candidate`, and as its stream built them in `fbc_stream`; both are null while the version has no FBC built or staged. `fbc_candidate` takes each operator and OCP version slot's FBC from the newest FBC Snapshot ART staged for stage (`source` `stage_snapshots`), else from the newest successful ART build (`stream`). An operator's slots are the OCP versions any of its FBCs of the version was built or staged for. `operators` always holds quay-operator, container-security-operator and quay-bridge-operator, each with the `head_bundle_nvr`, `channel` and `head_csv` of its newest FBC whose head bundle is joined, else, with none joined, of its newest FBC whose head bundle digest the image shipment holds, its slots' FBCs on that bundle in `members` and the others in `conflicts`, the slots without an FBC in `missing_ocp`, and `coverage`. Its `fbc_ri_stage` is `in` when a stage Release holding its head bundle succeeded, an `fbc-ri-*` Snapshot's or the version's image shipment's, else `failed` when one failed, else `none`, or `unknown` without a head bundle; `image_check` compares its head bundle with that of the version's STAGE build, else its newest build: `matches`, `differs`, or `absent` when either is unknown; without a head bundle NVR it `matches` when that build holds the digest its `members` head, given in `bundle_digest`. Each FBC's `head_bundle_digest` is the digest of the bundle heading its release channel, empty until rendered. `stage` counts its `members` whose newest stage Release succeeded, and, on `fbc_candidate`, each FBC's `staged` counts the staged FBC Snapshots of its slot whose newest Release succeeded. `images` lists its head bundle's relatedImages, by name, from its newest-OCP member FBC that was read, each with its ART build's `nvr`, `commit` and `build_url` (its ART build page), empty for an image ART did not build, and `stage` or `prod` set when a succeeded stage or prod Release holds its digest, and its CVE `scan`, null until the scan sync reads it. `compare` compares them with its FBC's previous channel entry (`previous`) and, on `fbc_candidate`, with the stream's head bundle when that is another (`newer`); each row is `same`, `rebuild` (same commit), `new source`, `new build` (a commit unknown), `added` or `removed`. `state` is `inconsistent` when an operator's FBCs head more than one bundle, `incomplete` when an operator or slot has no FBC, `unknown` while a head bundle or a staged catalog's identity is unresolved (staged catalogs no NVR names are in `unknown`), else `complete`; `errors` names each operator missing or heading more than one bundle. `pullspecs`, release-from-fbc's fbc-pullspecs by operator, then OCP version, is empty unless `complete`. `reading` counts the shown FBCs' reads as `read`, `failed` and `pending`. `verdict.state` is `shipped` for a shipped version, whose `fbc_candidate` is the record of what shipped, with no `missing_ocp` and no `pullspecs`; else `checking` while a read is pending, `not_ready` with a blocker, or `ready`. `verdict.items` lists blockers, then warnings, then info, each with its `operator` (empty for the release), `owner` (`ART`, `ART/Konflux`, `Quay (release-from-fbc)`, `Quay/ART`, `RR` or empty), `code` and `text`. Blockers: `not_staged` on a stream candidate; `missing_operator`, `missing_ocp`, `read_failed`, `no_head_bundle`, `stage_release_failed` and `unknown_fbc` on a staged one; `csv_mismatch`, `mixed_builds`, `image_mismatch` and `stage_push_failed`, when an operator's `fbc_ri_stage` is `failed`, on either; `stream_ahead` is info when the stream's newer bundle only rebuilds images, else a warning. `bundle_not_in_art`, owner `RR`, is one warning per operator whose staged FBCs head, in place of a bundle ART's history knows, the bundle of `image_check.bundle_digest`; such FBCs have no `no_head_bundle`. Each FBC's `ci` lists, by job, the periodic runs that installed from its digest (`exact`) and from another FBC of its operator, OCP version and head bundle (`equivalent`). `candidate` is the version's selected STAGE build with its `prod` Release, or null with the `reason`, e.g. `no release candidate yet`, or, for a version without a build while ART's newest build whose version resolves is of a lower one, `no 3.18.2 builds yet: ART still builds 3.18.1`. `catalogs` lists the version's FBC catalogs: each of its assembly's stage FBC Snapshots, `staged`, with its `snapshot`, `pullspec`, newest `release` and `release_plan`, then, for each operator and OCP version, the newest version-matched stream catalog ART did not stage, `built`. `unshipped_builds` lists, with a candidate, the newest image of the version of each component its stage Snapshot leaves out, by component, and is null without one. On `/api/v1/releases/overview`, a version's `latest_build` is when the newer of its newest build and its STAGE build was created, omitted when it has neither. Its `shipped_at` is when the Red Hat catalog first published the version, the earliest push date across the product's repositories of the images tagged `X.Y.Z` or `X.Y.Z-<build>`, so a respin keeps the first date; it is omitted when the catalog has not published the version or gave no push date, and a version only JIRA marks released has none.
-
-`/api/v1/releases/{version}/fbc-tags` returns the version's operator FBCs as the tags ART publishes them under in its public `quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc` repository, which release-from-fbc takes as `fbc-pullspecs`, for the Release inputs dialog. The server lists each operator's tags with the unauthenticated Quay tag API (`filter_tag_name=like:<operator>-fbc-<X.Y.Z>`, newest first, up to 10 pages of 100) and keeps them for two minutes; the browser never calls quay.io. It looks up one tag per operator and OCP version slot of the version's `fbc_candidate` (`source` `candidate`), or, with no candidate, of each operator at every `OCP_TARGET_VERSIONS` of the stream's `group.yml` in ocp-build-data (`ocp-build-data`). A tag is always a multi-arch tag matching `<operator>-fbc-<X.Y.Z>-<14-digit timestamp>.ocp<X.Y>`: the per-architecture tags (`-linux-arm64` and so on) and the base tags without a timestamp, which move, are never used. For a slot of a candidate ART staged in the FBC Snapshots (`fbc_candidate.source` `stage_snapshots`), the tag is the one whose manifest `digest` is the slot's staged digest, found by reading pages until it appears (a staged NVR that names such a tag is looked up on its own first, and used only when its digest is the staged one); `basis` is `staged`. If no tag points at the staged digest the slot is an error in `errors` naming the operator, the OCP version and the digest, and the newest tag is never taken in its place. When ART has built the slot again since, `newer_tag` names the newest tag and `info` says so; the tag listed stays the staged one. A slot with no staged digest (a candidate that is only what the stream built, or no candidate) takes the newest tag by start time, `basis` `newest`, with a line in `warnings`: "newest ART build, not staged in RR". `tags` lists the slots in `operators` order, then OCP version, each with its `pullspec` (`repository:tag`), the tag's manifest `digest`, and the slot's `staged_digest` and `staged_nvr` (empty for none). `pullspecs`, the tags' pullspecs in the same order, is empty while `errors` is not. The endpoint answers 404 for a version that is not a concrete `quay-vX.Y.Z` with a Konflux application, 503 when `-art-fbc-quay-url` is empty and 502 when Quay or ocp-build-data can't be read.
-
-`/api/v1/releases/{version}/issues` lists the version's Target Version tickets, by key. Each has its Jira `status` as of the last JIRA sync.
-
-`/api/v1/releases/{version}/ci` lists the version's ART FBC builds, newest first, each with its `state` (`shipped`, else `candidate`, else `staged`, else empty) and the periodic runs that installed from its catalog digest.
-
-## Running the application
-
-### Build
+Create a repository-root `.env` containing `JIRA_EMAIL`, `JIRA_TOKEN`, and, for
+private shipment MRs, `GITLAB_TOKEN`. GitHub credentials are optional. The Compose
+setup mounts `~/.kube/config` read-only; its selected context must be the Konflux
+reader context. The app needs network access to its configured source services.
 
 ```bash
-# Backend
+touch .env
+chmod 600 .env
+# Fill in the credentials before starting.
+podman compose up -d --build
+podman compose logs -f
+```
+
+Open [http://localhost:8088](http://localhost:8088). Use `RR_PORT=8089` before the
+Compose command to choose another host port. The named volume preserves SQLite
+data; JIRA writes are disabled. An empty database without working JIRA reads
+will not yet have releases to display. Docker Compose accepts the same commands.
+
+```bash
+podman compose down
+```
+
+This removes containers and the network while preserving the database volume.
+Do not add `--volumes` unless you intend to delete its data.
+
+## Deploy to OpenShift
+
+Use an image built from the current code. The default release tag is
+`quay.io/nasonawa/release-readness:v2.2`. Follow the
+[deployment guide](deploy/README.md) for credentials, cluster selection, storage,
+and access controls. In the intended application-cluster context:
+
+```bash
+cp deploy/.env.example deploy/.env
+chmod 600 deploy/.env
+# Fill the supported settings and credential paths in deploy/.env.
+python3 deploy/configure.py
+oc project nasonawa  # Match NAMESPACE in deploy/.env.
+oc apply -k deploy/.generated
+oc -n nasonawa rollout status deployment/release-readiness --timeout=300s
+oc -n nasonawa get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
+```
+
+The deployment includes the app, persistent storage, Service, TLS Route, and
+Secrets. The app has no built-in login layer; use your organization's access
+controls. Back up the PVC before upgrades; supported database migrations run
+in place.
+
+## Build
+
+Build the frontend first: Go embeds `web/dist/`.
+
+```bash
+npm --prefix web ci
+npm --prefix web run build
 go build -o release-readiness ./cmd/release-readiness/
-
-# Frontend
-cd web && npm install && npm run build
 ```
 
-### CLI flags
-
-| Flag | Env var | Default | Description |
-|------|---------|---------|-------------|
-| `-addr` | — | `:8080` | Listen address |
-| `-db` | — | `dashboard.db` | SQLite database path |
-| `-kubeconfig` | `KUBECONFIG` | — | Kubeconfig path (empty uses the in-cluster service account) |
-| `-namespace` | `KONFLUX_NAMESPACE` | `art-quay-tenant` | Konflux namespace to read Snapshots and Releases from |
-| `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |
-| `-konflux-ui-url` | `KONFLUX_UI_URL` | `https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com` | Konflux UI URL for links to `-namespace`'s applications, Snapshots and Releases (empty disables Konflux links) |
-| `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build links, and FBC builds synced and rendered for the FBC candidate (empty disables all of them) |
-| `-tekton-results-url` | — | `https://tekton-results-tekton-results.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com` | Tekton Results API; the CVE scans of candidate images are read there in the background with the Konflux credential (empty disables) |
-| `-jira-url` | `JIRA_URL` | `https://redhat.atlassian.net` | JIRA Cloud URL |
-| `-jira-api-url` | `JIRA_API_URL` | `-jira-url` | JIRA REST API base URL; set to `https://api.atlassian.com/ex/jira/<cloudId>` for scoped API tokens |
-| `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |
-| `-jira-token` | `JIRA_TOKEN` | — | JIRA Cloud API token (required to enable JIRA sync) |
-| `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
-| `-jira-poll-interval` | — | `5m` | JIRA sync poll interval |
-| `-github-token` | `GITHUB_TOKEN` | — | Read-only GitHub token for the reconciler's commit range lookups (empty reads GitHub unauthenticated) |
-| `-jira-write` | `JIRA_WRITE` | `false` | Write the reconciler's proposed actions to JIRA when `true`; needs `-jira-write-email` and `-jira-write-token`, else stays off |
-| `-jira-write-email` | `JIRA_WRITE_EMAIL` | — | JIRA Cloud account email of the write credential |
-| `-jira-write-token` | `JIRA_WRITE_TOKEN` | — | JIRA Cloud API token of the write credential, separate from `-jira-token` |
-| `-stage-release-plan-pattern` | `STAGE_RELEASE_PLAN_PATTERN` | `^quay-advisory-stage-\d+-\d+$` | Regexp matching the Konflux ReleasePlan names whose successful Releases are image STAGE builds (empty selects no staged build) |
-| `-prow-jobs` | `PROW_JOBS` | — | Periodic Prow jobs to ingest, as `job_name=konflux_application[,...]`, e.g. `periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18` |
-| `-prow-job-pattern` | `PROW_JOB_PATTERN` | — | `^`-anchored regexp of periodic Prow job names to discover each pass, with named groups `major` and `minor` that give the application `quay-<major>-<minor>`, e.g. `^periodic-ci-quay-quay-redhat-(?P<major>\d+)\.(?P<minor>\d+)-.+-nightly(-.+)?$`; a `-prow-jobs` entry for the same job wins |
-| `-prow-interval` | — | `15m` | Prow sync poll interval |
-| `-retention` | — | `720h` | Age past which data no release needs is pruned daily and not ingested: Snapshots not ART staged, shipped or the newest of their application, Failed Releases not of an ART staged Snapshot, Prow runs and unreferenced image caches (0 disables) |
-| `-catalog-url` | — | `https://catalog.redhat.com/api/containers/v1` | Red Hat container catalog API, checked hourly in the background to mark versions shipped (empty leaves JIRA's released flag as the only shipped signal) |
-| `-art-fbc-quay-url` | — | `https://quay.io` | Quay API to list the tags of ART's public `redhat-user-workloads/ocp-art-tenant/art-fbc` repository from, without credentials, for the Release inputs FBC pullspecs; the stream's `group.yml` is read from `-ocp-build-data-url` (empty disables) |
-| `-gitlab-url` | — | `https://gitlab.cee.redhat.com` | GitLab holding ART's shipment MRs, polled for each unshipped version and each still-open MR (empty disables) |
-| `-gitlab-token` | `GITLAB_TOKEN` | — | GitLab `read_api` token (empty reads anonymously, throttled) |
-| `-shipment-project` | — | `116177` | GitLab project ID of ART's shipment MRs (ocp-shipment-data) |
-| `-ocp-build-data-url` | — | `https://raw.githubusercontent.com/openshift-eng/ocp-build-data` | Raw ocp-build-data URL, whose `quay-X.Y` `releases.yml` names each assembly's shipment MR |
-| `-gitlab-poll-interval` | — | `5m` | Shipment MR sync poll interval |
-
-### Local development
+To build a container image:
 
 ```bash
-# Start backend (the kubeconfig needs read access to Snapshots and Releases in the namespace,
-# and to its Tekton Results records while -tekton-results-url is set)
-KUBECONFIG=<path> go run ./cmd/release-readiness -addr :8088 -db /tmp/rr.db
-
-# In a separate terminal, start the Vite dev server (proxies /api to localhost:8088)
-cd web && npm run dev
+podman build -f deploy/Containerfile --build-arg APP_VERSION=v2.2 \
+  -t quay.io/nasonawa/release-readness:v2.2 .
 ```
 
-### Frontend browser tests and visual review
+Building does not publish the image. Use a unique tag or digest for reproducible
+production rollouts.
 
-See [the Playwright guide](web/e2e/README.md) for browser tests and the TypeScript
-`shots`, `a11y`, and `compare` commands. These share the frontend's npm/Chromium
-installation; Python Playwright is no longer needed. Tests use mocked APIs and
-run without the backend. The separate [Sippy/GCS mock comparison](internal/prow/testdata/sippy-experiment/README.md)
-remains a Go test workflow.
+## Test
 
-### Deployment
-
-Use [the OpenShift Kustomize setup](deploy/README.md) to configure and deploy the full application with `oc`, a deployment `.env`, and local credential files.
-
-`deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases, and get/list on `results.tekton.dev` results and records for the CVE scan counts. The Role and RoleBinding must live in the Konflux namespace the app reads.
-
-### Upgrading
-
-The schema changed when the Konflux source moved to Kubernetes. Delete the old SQLite database file before upgrading; it is recreated on startup.
-
-## v2 portfolio and validation
-
-For current OpenShift deployment and credential setup, see [the Kustomize guide](deploy/README.md). v2.2 is the current v2 release.
-
-The v2 UI groups product streams into cards and concrete z-streams into release stages. `GET /api/v1/releases/overview?portfolio=1` adds FBC preparation verdicts and required-job coverage without changing the legacy overview projection. `published` means the Red Hat catalog confirms publication; `shipped` retains the existing catalog-or-JIRA meaning.
-
-`GET /api/v1/releases/{version}/validation` returns the required-job plan and exact-candidate results. With `-prow-job-discovery` (`PROW_JOB_DISCOVERY=true`), the app imports release periodics from both `ci-operator/jobs/quay/quay` and `ci-operator/jobs/quay/quay-operator`, pinned to one openshift/release commit. The complete inventory is stored in SQLite and published atomically. Jobs with no runs remain required. Only current periodic jobs define coverage; removed definitions remain in SQLite for audit but no longer count as configured requirements. Failed or partial imports preserve the last good inventory. Discovery does not read `_generator/matrix.yaml`, generated ci-operator configs, or the old generator-derived JSON snapshot. `-validation-plan` is ignored in discovery mode and remains available only for legacy ingestion. A complete inventory with no jobs for a stream produces “No CI configured” on its card and workbench; an inventory that has never loaded is shown as unavailable. Zero jobs never establishes readiness. No run status is embedded in the plan.
-
-Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources (plus periodic inventory when enabled), and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The new projection is advisory and does not execute a shipment or write to JIRA.
-
-The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.z`, latest available release, and expandable z-stream records. Stages display concrete `x.y.z` releases; **Show history** adds older records. Opening either goes to the same exact-release workspace: release briefing, validation workbench, and searchable JIRA issues. Links preserve the portfolio layout, product, and history selection. Motion respects the system reduced-motion preference.
-
-```mermaid
-flowchart LR
-    A[ART builds] --> K[Konflux snapshots and stage releases]
-    K --> P[Prow runs against candidate images]
-    G[Current periodic job inventory] --> V[Full-matrix validation]
-    P --> D[(SQLite ingestion)]
-    K --> D
-    J[JIRA release scope] --> D
-    D --> V
-    V --> U[Portfolio and exact-release workspace]
-    U --> M[Human shipment MR review]
-    M --> R[Quay and operator publication]
-    R --> C[Red Hat catalog confirmation]
-    C --> U
-```
-
-Dynamic periodic discovery establishes the expected denominator and schedules CI ingestion for matching release candidates. Streams without matching configured periodics show “No CI configured.” The optional legacy `-validation-plan` mode requires an operator-supplied plan and separate `PROW_JOBS` or `PROW_JOB_PATTERN` configuration. Exact-FBC identity is the supported gating adapter; standalone/image-only jobs need suitable image-identity evidence. The UI distinguishes missing historical FBC records or stream fallback FBCs from confirmed release-specific publication.
-
-### Local v2 Compose review
-
-`compose.yaml` builds the embedded SPA and Go server together using `deploy/Containerfile`, binds only to localhost, discovers validation coverage from Prow periodic job configurations, and forces `JIRA_WRITE=false`. Provide `.env` with the read credentials described above (an empty file is valid, but a fresh DB will have no releases without JIRA). The mounted kubeconfig must point to Konflux with the read permissions listed above. Nothing is deployed to OpenShift.
+After installing dependencies and building the frontend:
 
 ```bash
-# 8089 allows the previous 8088 app to remain available for comparison.
-RR_PORT=8089 docker compose -p release-readiness-v2 up -d --build
-# Or use podman compose with its Docker-compatible Compose provider.
-RR_PORT=8089 docker compose -p release-readiness-v2 down
+go test ./...
+go vet ./...
+golangci-lint run
+npm --prefix web test
+npm --prefix web run lint
+npm --prefix web run typecheck:e2e
+(cd web && npx playwright install chromium && npm run test:e2e)
+python3 -m unittest discover -s deploy -p 'test_*.py'
 ```
 
-The default named volume is isolated by Compose project name. To review an existing dataset, set `RR_DATA_DIR` to a separate directory containing an SQLite backup named `release-readiness.db`; do not share a running service's database file. The SELinux setting applies only to this local container so the existing kubeconfig is not relabeled. Build-context ignore files exclude credentials, databases, and prototype artifacts.
+Use a Go-compatible `golangci-lint` version. Deployment render tests need `oc` and
+PyYAML. Browser tests use mocked APIs and a temporary frontend, without backend
+credentials. See the [Playwright guide](web/e2e/README.md) for screenshots,
+accessibility checks, and comparison tools.
 
-Browser tests can target the built container:
+## Documentation
 
-```bash
-cd web
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:8089 npm run test:e2e
-# If using a system browser instead of Playwright's downloaded Chromium:
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:8089 \
-  PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome npm run test:e2e
-```
-
-These tests intercept API responses inside the test browser for deterministic edge cases; the running app uses the real API. With no `PLAYWRIGHT_BASE_URL`, Playwright starts the Vite development server as before.
-
-
-## Background ingestion: dynamic jobs and Sippy
-
-`compose.yaml` enables dynamic job discovery and Sippy-assisted ingestion, polls CI every two minutes, and keeps JIRA writing disabled. The binary remains opt-in for these integrations for compatibility with existing deployments:
-
-```sh
-release-readiness -prow-job-discovery \
-  -sippy-url https://sippy.dptools.openshift.org \
-  -prow-interval 2m
-```
-
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `-prow-job-discovery` / `PROW_JOB_DISCOVERY` | false in binary; true in Compose | Persist required periodic definitions from GitHub |
-| `-prow-inventory-interval` | 10m | Check the pinned config revision; unchanged revisions skip file downloads |
-| `-sippy-url` / `SIPPY_URL` | empty in binary | Sippy API base; requires discovery enabled |
-| `-ci-workers` | 4 | Concurrent GCS evidence fetches |
-| `-jira-workers` | 2 | Concurrent release issue fetches with shared request pacing |
-| `-art-workers` | 2 | Concurrent ART component resolutions |
-| `-ci-stream-budget` | 2m | Maximum duration per Sippy stream or live GCS job; foreground starting stream rotates |
-| `-ci-candidate-lookback` | 24h | Look back before an active release's earliest known ART FBC build start |
-| `-prow-live-refresh-interval` | 2m | Foreground GCS discovery for pending/triggered runs Sippy may omit; 0 disables |
-| `-prow-history-interval` | 1h | One historical-only stream per interval, after successful foreground work; 0 disables |
-| `-prow-history-budget` | 30s | Maximum duration of that best-effort historical pass |
-| `-art-current-budget` | 2m | Current-release ART history work per pass |
-| `-art-history-interval` | 1h | One ART backfill stream per interval; 0 disables |
-| `-art-history-budget` | 30s | Historical ART and source metadata budget |
-
-Sippy and ART ingestion prioritize streams with upcoming releases using both JIRA lifecycle flags and the dashboard's catalog publication data. A published-only stream is historical even if JIRA still says unreleased. Mixed streams and unknown streams stay foreground. Priority reads use stored lifecycle metadata without waiting for catalog network access; a failed or older-than-three-hours catalog snapshot does not demote work. Published z-streams are excluded from active CI lookup windows when the catalog is fresh.
-
-Known historical-only Prow streams rotate one at a time after successful foreground work, with an independent interval and time budget; no legacy GCS listing is performed for them. History errors are reported separately as `prow-history` and do not invalidate current-release `prow` freshness.
-
-Sippy supplies release-scoped paginated run indexes. The search starts around the earliest dated FBC of active releases in the stream, with the configured lookback and retention boundary. A release without a dated FBC schedules no lookup. Other z-streams with dated FBCs can still proceed, sharing one query per stream. Job inventory remains metadata-only; it does not itself trigger CI fetching. Both timezone-qualified and timezone-less UTC ART timestamps are accepted. The adapter re-reads that bounded window to accommodate late indexing; it does not advance a timestamp-only cursor that could skip late runs. A maximum of 200 pages of 100 runs per stream fails explicitly if exceeded. Sippy's recent history is capped at 90 days even when app retention is disabled; already stored evidence remains governed by app retention. ART timestamps are build start times, not claimed publication timestamps, so they provide a conservative search boundary.
-
-For indexed runs, `tested-images.json` still establishes catalog/bundle/component identity; `finished.json` supplies authoritative terminal result and completion time. A run inside the time window is not proof that it tested the candidate. Unknown/changed targets use `prowjob.json` fallback; older CSV evidence remains supported but cannot establish an exact catalog match. Missing artifacts are retried rather than permanently cached. Complete exact-identity evidence is cached in SQLite across restarts. Fetch caching is separate from readiness: completed runs under 24 hours old retry incomplete evidence after 2 minutes; older legacy/image evidence without a catalog identity is revisited after 24 hours, and older missing/invalid evidence after 6 hours. Running/unknown runs remain eligible each pass. The persisted fetch time preserves these delays across restarts, and late evidence is eventually revisited. A deferred fetch never makes a job pass. Artifact writes use transactions of at most 20 runs; network fetches occur outside those transactions.
-
-The normal Sippy path avoids GCS directory listings. The separately paced live refresh runs immediately and every 2 minutes by default, across foreground jobs using the bounded worker pool. It discovers queued/running jobs Sippy may omit, using GCS listings scoped to the matched candidate window and retention; stored completed runs are skipped and out-of-window run artifacts are not read. Both readers check `tested-images.json` while a job is active, so a published exact FBC identity can show Running before completion. If CI has not uploaded that artifact yet, identity remains unverified; job names or mutable image tags cannot establish the selected digest. A newer confirmed-FBC rerun shows Running until it finishes; an older unfinished run does not hide a later result. Sippy failures leave stored evidence intact and report the `prow` source as unhealthy. They do not silently fall back to a green result. Source errors and freshness appear in `/api/v1/sync-status`. When no current FBC has configured jobs, the source reports an `idle_reason` without inventing a successful fetch or generating a stale-source warning.
-
-Worker queues are bounded and cancellation-aware, with serial persistence within each source batch. ART resolver/history/scan calls share a one-request-per-second client limit. Current ART history runs every 2 minutes, scanning the newest 3 days of foreground streams with a 2-minute budget. Starting stream rotates to avoid starvation. Historical work runs afterward, rotating one stream per hour with a 30-second budget and at most 7 days; source metadata backfill shares that budget. Its `art-backfill` status is separate from current-release `art-history`. An intentional time-budget pause is logged as paused, without claiming success or creating a source error; real upstream failures remain visible. Partial days are never marked complete. FBC rendering and operand-resolution failures remain explicit and are not converted into success. JIRA keeps full per-version issue reconciliation and existing 429 retry behavior. No page or partial JIRA response is treated as a complete issue scope.
-
-Each Prow stream logs total duration, Sippy duration/pages, GCS request count, cached/deferred runs and persisted results. ART logs phase durations, current days completed, and backfill failures. The validation API includes an `evidence` explanation on each job row. Missing results distinguish no ingested run, unavailable artifacts, unverified identity, a different FBC, and incomplete candidate correlation, with an observed-run link when available. Separately paced historical sources do not determine the header's foreground “Updated” time. Release pages show pending background history separately from current FBC loading, so history alone does not keep a loading spinner active.
-
-The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. In discovery mode the imported inventory selects jobs; `PROW_JOB_PATTERN` is only used by legacy name discovery when dynamic discovery is off.
-
-For local startup, run `podman compose up --build` (or Docker Compose). To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. To return to entirely legacy configuration, also set `RR_PROW_JOB_DISCOVERY=false` and supply `PROW_JOBS` or `PROW_JOB_PATTERN`. No OCP deployment is needed for these changes.
-
-Verification uses only loopback API mocks: `go test -race ./internal/prow ./internal/db ./internal/release ./internal/server ./internal/jira ./internal/artbuild ./internal/workpool`. The earlier request-count experiment now shares production artifact enrichment; the production integration tests cover batching, persistent caches, late artifacts, pagination failures, candidate windows and inventory freshness. Local runtime source health is tracked separately from these deterministic mock tests.
-
-### Collection and matching order
-
-JIRA release tickets identify release versions and their issues. The shipment MR
-sync uses those stored release versions to resolve the assembly's GitLab MR;
-GitLab failures do not prevent JIRA updates. ART history and Konflux stay separate:
-ART's configured groups supply build/FBC identities, while Konflux supplies
-snapshots and promotion outcomes. No source network call happens in an HTTP
-page request to schedule CI.
-
-The periodic inventory sync stores job names, metadata and configuration links.
-On each background CI pass, the selector joins known releases to ART FBC versions
-and dates before scheduling matching stream jobs. Sippy indexes the resulting
-window and GCS `tested-images.json` confirms the tested identity. A timestamp or
-matching version alone never passes the exact-FBC gate; observed CI results and
-different/newer FBC warnings remain separate. Historical-only streams are lower
-priority. Nothing in this workflow triggers new Prow executions.
+- [Architecture](docs/architecture.md): components, workflow diagram, persistence.
+- [How readiness works](docs/how-it-works.md): portfolio, releases, FBC matching,
+  validation, shipment status, and API semantics.
+- [Synchronization](docs/syncing.md): sources, scheduling, caching, history,
+  retention, and freshness.
+- [CLI and configuration reference](docs/cli-reference.md): flags, environment
+  mappings, defaults, and deployment configuration boundaries.
+- [OpenShift deployment](deploy/README.md): Kustomize, credentials, upgrades.
+- [Frontend tests and review tools](web/e2e/README.md): browser testing and visuals.
