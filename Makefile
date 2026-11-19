@@ -9,7 +9,7 @@ REVISION := $(shell git rev-parse HEAD)
 export RR_ENV_FILE := $(abspath $(ENV_FILE))
 COMPOSE = $(DOCKER) compose --env-file "$(ENV_FILE)"
 
-.PHONY: help up down logs ps deps build-web test test-go test-web test-e2e test-deploy lint build image push
+.PHONY: help up down logs ps deps build-web test test-go test-web test-e2e test-deploy lint build push
 
 help:
 	@printf '%s\n' \
@@ -20,7 +20,7 @@ help:
 	  'make deps        Install frontend dependencies and Playwright Chromium' \
 	  'make test        Run Go, web, browser, and deployment tests' \
 	  'make lint        Run Go and web linters' \
-	  'make image       Build the Docker image (make build is an alias)' \
+	  'make build       Build the Docker image' \
 	  'make push        Push an already-built image; does not build or deploy' \
 	  '' \
 	  'Overrides: ENV_FILE=deploy/.env VERSION=v2.2 IMAGE=quay.io/your-org/release-readiness:latest'
@@ -65,9 +65,7 @@ lint:
 	golangci-lint run
 	npm --prefix web run lint
 
-build: image
-
-image:
+build:
 	$(DOCKER) build -f deploy/Containerfile --build-arg APP_VERSION="$(VERSION)" \
 	  --label org.opencontainers.image.revision="$(REVISION)" -t "$(IMAGE)" .
 
