@@ -1,6 +1,7 @@
 import {
 	Alert,
 	Button,
+	Checkbox,
 	EmptyState,
 	EmptyStateBody,
 	Label,
@@ -60,6 +61,7 @@ export default function ReleasePortfolio() {
 	const product = params.get("product") || "all",
 		query = params.get("q") || "";
 	const history = params.get("history") === "1";
+	const available = params.get("available") === "1";
 	const host = useRef<HTMLDivElement>(null);
 	const before = useRef(new Map<string, DOMRect>());
 	const animations = useRef<Animation[]>([]);
@@ -142,7 +144,7 @@ export default function ReleasePortfolio() {
 		};
 	}, [stopMotion]);
 	const path = (ov: ReleaseOverview) =>
-		`/releases/${encodeURIComponent(ov.release.name)}?${new URLSearchParams({ layout, product, ...(history ? { history: "1" } : {}) })}`;
+		`/releases/${encodeURIComponent(ov.release.name)}?${new URLSearchParams({ layout, product, ...(history ? { history: "1" } : {}), ...(available ? { available: "1" } : {}), ...(query ? { q: query } : {}) })}`;
 	const ticket = (ov: ReleaseOverview) =>
 		ov.release.release_ticket_key ? (
 			<a
@@ -228,8 +230,12 @@ export default function ReleasePortfolio() {
 				.toLowerCase()
 				.includes(query.toLowerCase()),
 	);
-	const groups = groupStreams(filtered),
-		staged = stageReleases(filtered, history);
+	const allGroups = groupStreams(filtered);
+	const groups =
+		layout === "cards" && !available
+			? allGroups.filter((g) => g.releases.some((r) => !r.published))
+			: allGroups;
+	const staged = stageReleases(filtered, history);
 	return (
 		<PageSection className="rr-page">
 			<div className="rr-portfolio-heading">
@@ -304,6 +310,14 @@ export default function ReleasePortfolio() {
 					value={query}
 					onChange={(_, v) => change("q", v)}
 				/>
+				{layout === "cards" && (
+					<Checkbox
+						id="show-available-releases"
+						label="Show available releases"
+						isChecked={available}
+						onChange={(_, checked) => change("available", checked ? "1" : "")}
+					/>
+				)}
 				{layout === "stages" && (
 					<Switch
 						id="release-history"
@@ -320,14 +334,16 @@ export default function ReleasePortfolio() {
 						? "Showing all recorded z-streams, including earlier releases."
 						: "Showing upcoming releases and the latest published z-stream in each stream. Enable history for earlier releases."}
 			</p>
-			{!filtered.length && (
+			{!(layout === "cards" ? groups.length : staged.length) && (
 				<EmptyState
 					titleText={data.length ? "No matching releases" : "No releases yet"}
 					headingLevel="h2"
 				>
 					<EmptyStateBody>
 						{data.length
-							? "Try another product, version or ticket."
+							? layout === "cards" && !available
+								? "Try another search or enable Show available releases."
+								: "Try another product, version or ticket."
 							: "Releases appear when JIRA sync discovers them. Source status is available in the header."}
 					</EmptyStateBody>
 				</EmptyState>

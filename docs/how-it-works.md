@@ -10,7 +10,7 @@ The UI groups product streams into cards and concrete z-streams into release sta
 
 Readiness requires the full declared denominator, passing latest completed exact-FBC runs, successful/current Prow, Konflux, ART-history and FBC-render sources (plus periodic inventory when enabled), and the existing FBC preparation verdict. Equivalent bundles and missing standalone identity evidence do not satisfy the gate. An incomplete or unavailable plan never means ready. The readiness projection is advisory and does not execute a shipment or write to JIRA.
 
-The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.z`, latest available release, and expandable z-stream records. Stages display concrete `x.y.z` releases; **Show history** adds older records. Opening either goes to the same exact-release workspace: release briefing, validation workbench, and searchable JIRA issues. Links preserve the portfolio layout, product, and history selection. Motion respects the system reduced-motion preference.
+The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.z`, latest available release, and expandable z-stream records. In Cards view, **Show available releases** includes streams whose releases are all confirmed published; these streams are hidden by default. Streams with pending or publication-unconfirmed releases remain visible, including their latest available z-stream details. The choice is preserved in the URL and does not filter Stages view. Stages display concrete `x.y.z` releases; **Show history** adds older records. Opening either goes to the same exact-release workspace: release briefing, validation workbench, and searchable JIRA issues. Links preserve the portfolio layout, product, and history selection. Motion respects the system reduced-motion preference.
 
 See [the backend workflow diagram](architecture.md) for collection and matching.
 
@@ -67,3 +67,23 @@ instead of being treated as a pass. No configured jobs is not a green release.
 The dashboard observes existing Prow jobs and shipment MRs. It neither launches
 CI jobs nor creates/approves shipments. The optional JIRA writer is disabled in
 the supplied Compose and OpenShift setups; see [syncing](syncing.md).
+
+## Validation job history
+
+**View history** on a validation row opens that job's stored runs in a side drawer.
+**All CI history** opens the same drawer across jobs. The default scope includes
+only verified catalog identities matching selected FBC members. **Include other
+and unverified FBCs** adds observations from the same product stream, including
+other z-streams and runs without identity artifacts. These observations never
+change the readiness denominator or verdict. Each FBC group shows its build
+identity, digest, run results, UTC start times, and Prow links. Totals describe
+runs on the current page, not required checks.
+
+`GET /api/v1/releases/{version}/ci-history` reads SQLite only. It accepts an
+optional exact `job`, `scope=selected|all` (default `selected`), `limit` (default
+50, maximum 100), and opaque `cursor`. The response contains `runs`,
+`selected_fbcs`, optional configured `job` metadata, and `next_cursor` when more
+runs exist. Pagination orders by start time, job name, and build ID. Candidate
+selection reuses the release selector without loading the entire CI run history.
+Missing identity is labeled unverified even when the observed job succeeded.
+Existing FBC-cell history links continue to use the build-grouped `/ci` API.
