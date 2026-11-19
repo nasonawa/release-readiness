@@ -11,3 +11,4 @@ web/test-results/
 web/tsconfig.tsbuildinfo
 .codex/
 .serena/
+.claude/

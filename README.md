@@ -90,10 +90,10 @@ go build -o release-readiness ./cmd/release-readiness/
 To build a container image:
 
 ```bash
-make image IMAGE=quay.io/your-org/release-readiness:latest VERSION=v2.2
+make build IMAGE=quay.io/your-org/release-readiness:latest VERSION=v2.2
 ```
 
-`make build` is an alias for `make image`. Building does not publish the image;
+`make build` builds the Docker image without publishing it;
 `make push IMAGE=quay.io/your-org/release-readiness:latest` pushes the existing tag.
 The default image is local-only `release-readiness:latest`; `VERSION` controls
 the application version independently of the image tag.
