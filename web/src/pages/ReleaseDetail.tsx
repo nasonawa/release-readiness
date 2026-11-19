@@ -78,6 +78,7 @@ import type {
 	ReleaseVersion,
 	ShipmentMR,
 } from "../api/types";
+import JobHistoryDrawer from "../components/JobHistoryDrawer";
 import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import OpenIn from "../components/OpenIn";
 import {
@@ -259,22 +260,42 @@ export default function ReleaseDetail() {
 			<Drawer isExpanded={!!ciCell} isInline position="end">
 				<DrawerContent
 					panelContent={
-						<CIDrawer
-							cell={ciCell}
-							builds={ci.data}
-							error={ci.error}
-							onRetry={ci.refetch}
-							onClose={() =>
-								setParams(
-									(prev) => {
-										const next = new URLSearchParams(prev);
-										next.delete("ci");
-										return next;
-									},
-									{ replace: true },
-								)
-							}
-						/>
+						ciCell === "all" || ciCell === "job" ? (
+							<JobHistoryDrawer
+								key={`${version}:${ciCell}:${params.get("job") || ""}`}
+								version={version!}
+								job={ciCell === "job" ? params.get("job") || "" : ""}
+								onClose={() =>
+									setParams(
+										(prev) => {
+											const next = new URLSearchParams(prev);
+											next.delete("ci");
+											next.delete("job");
+											next.set("view", "workbench");
+											return next;
+										},
+										{ replace: true },
+									)
+								}
+							/>
+						) : (
+							<CIDrawer
+								cell={ciCell}
+								builds={ci.data}
+								error={ci.error}
+								onRetry={ci.refetch}
+								onClose={() =>
+									setParams(
+										(prev) => {
+											const next = new URLSearchParams(prev);
+											next.delete("ci");
+											return next;
+										},
+										{ replace: true },
+									)
+								}
+							/>
+						)
 					}
 				>
 					{/* The open drawer covers the page below lg; hidden, it is out of the tab order too. */}
@@ -359,7 +380,7 @@ export default function ReleaseDetail() {
 function DetailBreadcrumb({ name }: { name: string }) {
 	const [params] = useSearchParams();
 	const home = new URLSearchParams();
-	for (const key of ["layout", "product", "history", "q"]) {
+	for (const key of ["layout", "product", "history", "available", "q"]) {
 		const value = params.get(key);
 		if (value) home.set(key, value);
 	}

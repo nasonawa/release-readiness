@@ -417,3 +417,29 @@ body {
 	overscroll-behavior: contain;
 	overflow-wrap: anywhere;
 }
+
+.rr-job-history .pf-v6-c-drawer__head {
+	border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.rr-job-history code,
+.rr-history-nvr {
+	overflow-wrap: anywhere;
+}
+.rr-history-note,
+.rr-history-job {
+	margin-block: 1rem;
+}
+.rr-history-group {
+	margin-block: 1.5rem;
+}
+.rr-history-group > header {
+	padding: 1rem;
+	background: var(--pf-t--global--background--color--secondary--default);
+	border-radius: 0.5rem 0.5rem 0 0;
+}
+.rr-history-group p {
+	margin-block: 0.5rem;
+}
+.rr-history-group td {
+	vertical-align: top;
+}

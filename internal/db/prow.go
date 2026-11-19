@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
@@ -117,4 +118,38 @@ func (d *DB) ListProwRunStarts(ctx context.Context, jobName string) ([]prow.Run,
 		runs[i] = prow.Run{JobName: jobName, BuildID: r.BuildID, StartedAt: parseOptionalTime(r.StartedAt)}
 	}
 	return runs, nil
+}
+
+// CIHistoryFilter uses a stable (start, job, build ID) cursor within one stream.
+type CIHistoryFilter struct {
+	Application, Job string
+	SelectedDigests  []string
+	IncludeOther     bool
+	Before           [3]string
+	Limit            int
+}
+
+type CIHistoryRun struct {
+	Job, BuildID, State, StartedAt, CompletedAt, ProwURL, ArtifactState, CatalogRef, FBCNVR string
+	InstallFailed                                                                           bool
+}
+
+func (d *DB) CIHistory(ctx context.Context, filter CIHistoryFilter) ([]CIHistoryRun, error) {
+	digests, err := json.Marshal(filter.SelectedDigests)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := d.queries().ListCIHistory(ctx, dbsqlc.ListCIHistoryParams{
+		Application: filter.Application, Job: filter.Job, IncludeOther: filter.IncludeOther,
+		SelectedJson: string(digests), FirstPage: filter.Before == [3]string{},
+		BeforeStart: filter.Before[0], BeforeJob: filter.Before[1], BeforeID: filter.Before[2], PageSize: int64(filter.Limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]CIHistoryRun, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, CIHistoryRun{Job: row.JobName, BuildID: row.BuildID, State: row.State, StartedAt: row.StartedAt, CompletedAt: row.CompletedAt, ProwURL: row.ProwUrl, ArtifactState: row.ArtifactState, CatalogRef: row.CatalogRef, FBCNVR: row.FbcNvr, InstallFailed: row.InstallFailed})
+	}
+	return result, nil
 }

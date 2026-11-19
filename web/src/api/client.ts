@@ -63,3 +63,20 @@ export function getValidation(version: string): Promise<Validation> {
 export function getReleaseCI(version: string): Promise<FBCBuild[]> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/ci`);
 }
+
+export function getCIHistory(
+	version: string,
+	job: string,
+	includeOther: boolean,
+	cursor: string,
+): Promise<import("./types").CIHistoryPage> {
+	const params = new URLSearchParams({
+		scope: includeOther ? "all" : "selected",
+		limit: "50",
+	});
+	if (job) params.set("job", job);
+	if (cursor) params.set("cursor", cursor);
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/ci-history?${params}`,
+	);
+}

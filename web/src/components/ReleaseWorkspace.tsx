@@ -15,7 +15,7 @@ import {
 } from "@patternfly/react-icons";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getValidation, listReleaseVersions } from "../api/client";
 import type {
 	DashboardConfig,
@@ -73,6 +73,7 @@ export default function ReleaseWorkspace({
 			const next = new URLSearchParams(prev);
 			next.set("view", view);
 			next.delete("ci");
+			next.delete("job");
 			next.delete("cell");
 			return next;
 		});
@@ -123,6 +124,7 @@ export default function ReleaseWorkspace({
 						onChange={(e) => {
 							const next = new URLSearchParams(params);
 							next.delete("ci");
+							next.delete("job");
 							next.delete("cell");
 							navigate(
 								`/releases/${encodeURIComponent(e.target.value)}?${next}`,
@@ -318,6 +320,24 @@ function ValidationWorkbench({
 	error?: Error;
 	retry: () => void;
 }) {
+	const [params, setParams] = useSearchParams();
+	const historyLink = (job?: string) => {
+		const next = new URLSearchParams(params);
+		next.set("view", "workbench");
+		next.set("ci", job ? "job" : "all");
+		next.delete("cell");
+		if (job) next.set("job", job);
+		else next.delete("job");
+		return `?${next}`;
+	};
+	const historyAction = (
+		<Button
+			onClick={() => setParams(new URLSearchParams(historyLink().slice(1)))}
+			variant="secondary"
+		>
+			All CI history
+		</Button>
+	);
 	const [status, setStatus] = useState("all"),
 		[arch, setArch] = useState("all");
 	if (error)
@@ -331,14 +351,14 @@ function ValidationWorkbench({
 		return (
 			<Alert isInline variant="info" title="CI configuration unavailable">
 				The job inventory has not been loaded. Readiness cannot be determined
-				yet.
+				yet. {historyAction}
 			</Alert>
 		);
 	if (data.total === 0)
 		return (
 			<Alert isInline variant="info" title="No CI configured">
 				No periodic jobs are configured for this version in the latest imported
-				job inventory. CI readiness cannot be established.
+				job inventory. CI readiness cannot be established. {historyAction}
 			</Alert>
 		);
 	const rows = (data.rows || []).filter(
@@ -351,7 +371,10 @@ function ValidationWorkbench({
 	);
 	return (
 		<section className="rr-record">
-			<h2>Required validation matrix</h2>
+			<div className="rr-card-heading">
+				<h2>Required validation matrix</h2>
+				{historyAction}
+			</div>
 			<ValidationProgress data={data} />
 			<p className="rr-muted">
 				Progress counts runs against the selected FBC. Results also show
@@ -444,6 +467,14 @@ function ValidationWorkbench({
 									) : (
 										"No verified candidate run"
 									)}
+									<p>
+										<Link
+											to={historyLink(row.job)}
+											aria-label={`View history for ${[row.display_name || row.job, row.cloud, row.storage, row.ocp && `OCP ${row.ocp}`, row.architecture].filter(Boolean).join(" · ")}`}
+										>
+											View history
+										</Link>
+									</p>
 									<details>
 										<summary>Details</summary>
 										{row.evidence && <p className="rr-muted">{row.evidence}</p>}

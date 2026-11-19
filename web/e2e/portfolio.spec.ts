@@ -340,3 +340,179 @@ test("source freshness uses only the shared hook polling interval", async ({
 	// Desktop and compact masthead consumers each poll once per minute.
 	expect(requests).toBeLessThanOrEqual(2);
 });
+
+test("cards reveal available streams on demand and retain the choice", async ({
+	page,
+}) => {
+	const published = structuredClone(releases[1]);
+	published.release.name = "quay-v3.17.9";
+	await page.route("**/api/v1/releases/overview*", (route) =>
+		route.fulfill({ json: [...releases, published] }),
+	);
+	await page.goto("/");
+	const toggle = page.getByRole("checkbox", {
+		name: "Show available releases",
+	});
+	await expect(toggle).not.toBeChecked();
+	await expect(
+		page.getByRole("heading", { name: "Quay 3.17", exact: true }),
+	).toHaveCount(0);
+	await expect(page.getByText("Available:", { exact: false })).toBeVisible();
+	await toggle.click();
+	await expect(toggle).toBeChecked();
+	await expect(
+		page.getByRole("heading", { name: "Quay 3.17", exact: true }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Stages", exact: true }).click();
+	await expect(toggle).toHaveCount(0);
+	await expect(
+		page.getByRole("heading", { name: "Quay v3.17.9", exact: true }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Cards", exact: true }).click();
+	await expect(toggle).toBeChecked();
+	await page
+		.getByRole("heading", { name: "Quay 3.18", exact: true })
+		.getByRole("link")
+		.click();
+	await page.getByRole("link", { name: "All releases", exact: true }).click();
+	await expect(toggle).toBeChecked();
+	await toggle.click();
+	await expect(toggle).not.toBeChecked();
+	await page
+		.getByRole("textbox", { name: "Find a release or ticket" })
+		.fill("3.17");
+	await expect(
+		page.getByText("Try another search or enable Show available releases."),
+	).toBeVisible();
+	await toggle.click();
+	await expect(toggle).toBeChecked();
+	await expect(
+		page.getByRole("heading", { name: "Quay 3.17", exact: true }),
+	).toBeVisible();
+});
+
+test("job history scopes FBCs, pages through stored runs and closes back to workbench", async ({
+	page,
+}, testInfo) => {
+	const requests: string[] = [];
+	await page.route("**/api/v1/releases/*/ci-history?*", (route) => {
+		const url = new URL(route.request().url());
+		requests.push(url.search);
+		const all = url.searchParams.get("scope") === "all";
+		const next = !!url.searchParams.get("cursor");
+		return route.fulfill({
+			json: {
+				selected_fbcs: [
+					{
+						digest: "sha256:selected",
+						nvr: "quay-operator-fbc-3.18.4-selected",
+					},
+				],
+				job: url.searchParams.get("job") ? validation.rows[0] : undefined,
+				next_cursor: next ? undefined : "page-two",
+				runs: [
+					{
+						job: "job-a",
+						build_id: next ? "2" : "1",
+						display_name: "Install · FIPS · AWS / S3",
+						state: next ? "failure" : "success",
+						started_at: "2026-11-19T03:00:00Z",
+						prow_url: `https://prow.example/${next ? "2" : "1"}`,
+						fbc_match: "exact",
+						fbc: {
+							digest: "sha256:selected",
+							nvr: "quay-operator-fbc-3.18.4-selected",
+						},
+					},
+					...(all
+						? [
+								{
+									job: "job-a",
+									build_id: "3",
+									state: "success",
+									started_at: "2026-11-18T03:00:00Z",
+									prow_url: "https://prow.example/3",
+									fbc_match: "different",
+									fbc: {
+										digest: "sha256:other",
+										nvr: "quay-operator-fbc-3.18.4-other",
+									},
+								},
+								{
+									job: "job-a",
+									build_id: "4",
+									state: "pending",
+									started_at: "2026-11-17T03:00:00Z",
+									prow_url: "https://prow.example/4",
+									fbc_match: "unverified",
+								},
+							]
+						: []),
+				],
+			},
+		});
+	});
+	await page.goto("/releases/quay-v3.18.4?view=workbench");
+	expect(requests).toHaveLength(0);
+	const open = page.getByRole("link", {
+		name: "View history for Install · FIPS · AWS · S3 · OCP 4.18 · amd64",
+	});
+	await open.click();
+	await expect(
+		page.getByRole("heading", { name: "Job history", exact: true }),
+	).toBeVisible();
+	await expect(page.getByText("Selected FBC", { exact: true })).toBeVisible();
+	await expect(page.getByText("Other FBC", { exact: true })).toHaveCount(0);
+	expect(requests[0]).toContain("job=job-a");
+	await page.getByRole("button", { name: "Next history page" }).click();
+	await expect(
+		page.getByRole("link", { name: /Open Prow run 2:/ }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Previous history page" }).click();
+	await expect(
+		page.getByRole("link", { name: /Open Prow run 1:/ }),
+	).toBeVisible();
+	await page
+		.getByText("Include other and unverified FBCs", { exact: true })
+		.click();
+	await expect(
+		page.getByRole("switch", { name: "Include other and unverified FBCs" }),
+	).toBeChecked();
+	await expect(page.getByText("Other FBC", { exact: true })).toBeVisible();
+	await expect(page.getByText("FBC unverified", { exact: true })).toBeVisible();
+	await captureFullPage(page, testInfo.outputPath("job-history.png"));
+	await page.keyboard.press("Escape");
+	await expect(
+		page.getByRole("heading", { name: "Job history", exact: true }),
+	).toHaveCount(0);
+	await expect(
+		page.getByRole("tab", { name: "Validation workbench", exact: true }),
+	).toHaveAttribute("aria-selected", "true");
+	await page
+		.getByRole("button", { name: "All CI history", exact: true })
+		.click();
+	await expect(
+		page.getByRole("heading", { name: "All CI history", exact: true }),
+	).toBeVisible();
+	expect(requests.at(-1)).not.toContain("job=");
+	await page.setViewportSize({ width: 420, height: 850 });
+	await expect(
+		page.getByRole("button", { name: "Close drawer panel" }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Next history page" }).click();
+	await expect(
+		page.getByRole("link", { name: /Open Prow run 2:/ }),
+	).toBeVisible();
+	const historyScope = page.getByRole("switch", {
+		name: "Include other and unverified FBCs",
+	});
+	await historyScope.focus();
+	await page.keyboard.press("Space");
+	await expect(historyScope).toBeChecked();
+	await expect(page.getByText("Other FBC", { exact: true })).toBeVisible();
+	await captureFullPage(page, testInfo.outputPath("history-mobile.png"));
+	await page.keyboard.press("Escape");
+	await expect(
+		page.getByRole("heading", { name: "Required validation matrix" }),
+	).toBeVisible();
+});

@@ -381,3 +381,21 @@ export interface SyncStatus {
 	/** Every tracked source, sorted. */
 	sources: SyncSource[];
 }
+
+export interface CIHistoryRun {
+	job: string;
+	build_id: string;
+	display_name?: string;
+	state: string;
+	started_at: string;
+	prow_url: string;
+	fbc_match: "exact" | "different" | "unverified";
+	fbc?: { digest: string; nvr?: string };
+}
+
+export interface CIHistoryPage {
+	runs: CIHistoryRun[];
+	job?: ValidationRow;
+	selected_fbcs: { digest: string; nvr?: string }[];
+	next_cursor?: string;
+}
