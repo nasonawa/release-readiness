@@ -2,7 +2,7 @@
 
 DOCKER ?= docker
 VERSION ?= v2.2
-IMAGE ?= release-readiness:$(VERSION)
+IMAGE ?= release-readiness:latest
 ENV_FILE ?= .env
 REVISION := $(shell git rev-parse HEAD)
 
@@ -23,7 +23,7 @@ help:
 	  'make image       Build the Docker image (make build is an alias)' \
 	  'make push        Push an already-built image; does not build or deploy' \
 	  '' \
-	  'Overrides: ENV_FILE=deploy/.env VERSION=v2.2 IMAGE=quay.io/your-org/release-readiness:v2.2'
+	  'Overrides: ENV_FILE=deploy/.env VERSION=v2.2 IMAGE=quay.io/your-org/release-readiness:latest'
 
 up:
 	$(COMPOSE) up -d --build
