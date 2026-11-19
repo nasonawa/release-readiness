@@ -15,7 +15,7 @@ persistence. Background collectors prioritize current releases over history.
 
 ## Prerequisites
 
-- Docker Engine with the Docker Compose plugin for local containers.
+- Docker Engine with the Docker Compose plugin, and GNU Make for task shortcuts.
 - Node.js 24 and the Go version specified in `go.mod` for source builds/tests.
 - JIRA read credentials for release discovery and a Konflux reader kubeconfig
   for build/promotion data. GitLab read access enables private shipment MR lookup.
@@ -32,8 +32,8 @@ reader context. The app needs network access to its configured source services.
 touch .env
 chmod 600 .env
 # Fill in the credentials before starting.
-docker compose up -d --build
-docker compose logs -f
+make up
+make logs
 ```
 
 Open [http://localhost:8088](http://localhost:8088). Use `RR_PORT=8089` before the
@@ -42,10 +42,15 @@ data; JIRA writes are disabled. An empty database without working JIRA reads
 will not yet have releases to display.
 
 ```bash
-docker compose down
+make down
 ```
 
-This removes containers and the network while preserving the database volume.
+Use `make up ENV_FILE=deploy/.env` to reuse an existing environment file.
+`KONFLUX_KUBECONFIG` in that file can select a reader kubeconfig instead of
+`~/.kube/config`. Use the same `ENV_FILE` for `make logs`, `make ps`, and `make down`.
+The Makefile uses your existing Docker configuration. Run `make help` for all targets.
+
+`make down` removes containers and the network while preserving the database volume.
 Do not add `--volumes` unless you intend to delete its data.
 
 ## Deploy to OpenShift
@@ -85,16 +90,21 @@ go build -o release-readiness ./cmd/release-readiness/
 To build a container image:
 
 ```bash
-docker build -f deploy/Containerfile --build-arg APP_VERSION=v2.2 \
-  -t quay.io/your-org/release-readiness:v2.2 .
+make image IMAGE=quay.io/your-org/release-readiness:v2.2 VERSION=v2.2
 ```
 
-Building does not publish the image. Use a unique tag or digest for reproducible
-production rollouts.
+`make build` is an alias for `make image`. Building does not publish the image;
+`make push IMAGE=quay.io/your-org/release-readiness:v2.2` pushes the existing tag.
+The default image is local-only `release-readiness:v2.2`.
+Use a unique tag or digest for reproducible production rollouts.
 
 ## Test
 
-After installing dependencies and building the frontend:
+For a fresh checkout, run `make deps` once. `make test` builds the embedded web
+bundle and runs Go tests/vet, web unit tests/lint, Playwright, and deployment
+render tests. Individual targets are `test-go`, `test-web`, `test-e2e`, and
+`test-deploy`; `make lint` also runs golangci-lint. The equivalent direct commands
+are:
 
 ```bash
 go test ./...
