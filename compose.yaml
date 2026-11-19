@@ -16,7 +16,7 @@ services:
     ports:
       - "127.0.0.1:${RR_PORT:-8088}:8080"
     env_file:
-      - .env
+      - ${RR_ENV_FILE:-.env}
     # Local bind mounts include the existing kubeconfig; do not relabel it.
     security_opt:
       - label=disable
@@ -36,7 +36,7 @@ services:
     volumes:
       # Live kubeconfig from `oc login` (token expires ~24h; re-login on the
       # host and restart the container when the konflux sync starts failing).
-      - ${HOME}/.kube/config:/kube/config:ro
+      - ${KONFLUX_KUBECONFIG:-${HOME}/.kube/config}:/kube/config:ro
       - ${RR_DATA_DIR:-rr-data}:/data
     restart: unless-stopped
 
