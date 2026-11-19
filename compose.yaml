@@ -1,7 +1,9 @@
-# Dev setup: builds deploy/Containerfile, mounts your kubeconfig
+# Local Docker Compose setup: builds deploy/Containerfile, mounts your kubeconfig
 # read-only, and loads JIRA credentials from .env (gitignored).
 #
-#   docker compose up --build      # or: podman compose up --build
+#   docker compose up -d --build
+#   docker compose logs -f
+#   docker compose down
 #
 # The app is then at http://localhost:8088. The SQLite DB persists in the
 # named volume `rr-data`.

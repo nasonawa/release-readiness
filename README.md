@@ -15,7 +15,7 @@ persistence. Background collectors prioritize current releases over history.
 
 ## Prerequisites
 
-- Podman with a Compose provider, or Docker Compose, for local containers.
+- Docker Engine with the Docker Compose plugin for local containers.
 - Node.js 24 and the Go version specified in `go.mod` for source builds/tests.
 - JIRA read credentials for release discovery and a Konflux reader kubeconfig
   for build/promotion data. GitLab read access enables private shipment MR lookup.
@@ -32,17 +32,17 @@ reader context. The app needs network access to its configured source services.
 touch .env
 chmod 600 .env
 # Fill in the credentials before starting.
-podman compose up -d --build
-podman compose logs -f
+docker compose up -d --build
+docker compose logs -f
 ```
 
 Open [http://localhost:8088](http://localhost:8088). Use `RR_PORT=8089` before the
 Compose command to choose another host port. The named volume preserves SQLite
 data; JIRA writes are disabled. An empty database without working JIRA reads
-will not yet have releases to display. Docker Compose accepts the same commands.
+will not yet have releases to display.
 
 ```bash
-podman compose down
+docker compose down
 ```
 
 This removes containers and the network while preserving the database volume.
@@ -85,7 +85,7 @@ go build -o release-readiness ./cmd/release-readiness/
 To build a container image:
 
 ```bash
-podman build -f deploy/Containerfile --build-arg APP_VERSION=v2.2 \
+docker build -f deploy/Containerfile --build-arg APP_VERSION=v2.2 \
   -t quay.io/your-org/release-readiness:v2.2 .
 ```
 

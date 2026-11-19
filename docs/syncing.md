@@ -100,7 +100,7 @@ Each Prow stream logs total duration, Sippy duration/pages, GCS request count, c
 
 The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. In discovery mode the imported inventory selects jobs; `PROW_JOB_PATTERN` is only used by legacy name discovery when dynamic discovery is off.
 
-For local startup, run `podman compose up --build` (or Docker Compose). To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. To return to entirely legacy configuration, also set `RR_PROW_JOB_DISCOVERY=false` and supply `PROW_JOBS` or `PROW_JOB_PATTERN`. These overrides apply to local Compose only.
+For local startup, run `docker compose up --build`. To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. To return to entirely legacy configuration, also set `RR_PROW_JOB_DISCOVERY=false` and supply `PROW_JOBS` or `PROW_JOB_PATTERN`. These overrides apply to local Compose only.
 
 Verification uses only loopback API mocks: `go test -race ./internal/prow ./internal/db ./internal/release ./internal/server ./internal/jira ./internal/artbuild ./internal/workpool`. Integration tests cover batching, persistent caches, late artifacts, pagination failures, candidate windows and inventory freshness. Local runtime source health is tracked separately from these deterministic mock tests.
 
