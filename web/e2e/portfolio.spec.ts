@@ -13,16 +13,16 @@ test("release table groups z-streams into stages and preserves navigation", asyn
 	await expect(
 		page.getByRole("heading", { name: "Release portfolio", exact: true }),
 	).toBeVisible();
-	// Upcoming releases plus each stream's latest published one.
+	// In-flight releases only; released ones wait for history.
 	await expect(
 		page.locator("table[aria-label='Releases'] tbody tr"),
-	).toHaveCount(3);
+	).toHaveCount(2);
 	await expect(
 		page.getByRole("link", { name: "Quay v3.18.4", exact: true }),
 	).toBeVisible();
 	await expect(
 		page.getByRole("link", { name: "Quay v3.18.3", exact: true }),
-	).toBeVisible();
+	).toHaveCount(0);
 	await expect(page.getByText("Mock evidence")).toHaveCount(0);
 	await page.getByRole("button", { name: "Stages", exact: true }).click();
 	await expect(page.locator(".rr-stage-grid article")).toHaveCount(3);
@@ -344,7 +344,7 @@ test("source freshness uses only the shared hook polling interval", async ({
 	expect(requests).toBeLessThanOrEqual(2);
 });
 
-test("table and stages share one release set with history on demand", async ({
+test("released releases wait for history in the table, not in stages", async ({
 	page,
 }) => {
 	const published = structuredClone(releases[1]);
@@ -353,26 +353,29 @@ test("table and stages share one release set with history on demand", async ({
 		route.fulfill({ json: [...releases, published] }),
 	);
 	await page.goto("/");
-	// A stream whose every release shipped still shows its newest one.
+	// The table shows in-flight releases only, so a stream whose every
+	// release shipped is hidden until history is enabled.
 	await expect(
 		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
-	).toBeVisible();
-	// Earlier published z-streams wait for history.
+	).toHaveCount(0);
 	await expect(
 		page.getByRole("link", { name: "Quay v3.18.2", exact: true }),
 	).toHaveCount(0);
+	// Stages still show each stream's latest published z-stream.
+	await page.getByRole("button", { name: "Stages", exact: true }).click();
+	await expect(
+		page
+			.locator(".rr-stage-lane.available")
+			.getByRole("heading", { name: "Quay v3.17.9", exact: true }),
+	).toBeVisible();
+	await page.getByRole("button", { name: "Table", exact: true }).click();
 	await page.getByText("Show history", { exact: true }).click();
+	await expect(
+		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
+	).toBeVisible();
 	await expect(
 		page.getByRole("link", { name: "Quay v3.18.2", exact: true }),
 	).toBeVisible();
-	await page.getByRole("button", { name: "Stages", exact: true }).click();
-	await expect(
-		page.getByRole("heading", { name: "Quay v3.17.9", exact: true }),
-	).toBeVisible();
-	await expect(
-		page.getByRole("switch", { name: "Show history", exact: true }),
-	).toBeChecked();
-	await page.getByRole("button", { name: "Table", exact: true }).click();
 	await page.getByRole("link", { name: "Quay v3.18.4", exact: true }).click();
 	await page.getByRole("link", { name: "All releases", exact: true }).click();
 	await expect(
@@ -384,6 +387,9 @@ test("table and stages share one release set with history on demand", async ({
 	).not.toBeChecked();
 	await expect(
 		page.getByRole("link", { name: "Quay v3.18.2", exact: true }),
+	).toHaveCount(0);
+	await expect(
+		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
 	).toHaveCount(0);
 });
 
