@@ -11,6 +11,28 @@ the current code before deployment. Replace `your-namespace` with your target
 OpenShift project throughout the configuration and commands. Preparing these
 files does not build an image or deploy anything.
 
+## Plain apply (single manifest)
+
+[app.yaml](app.yaml) is a standalone manifest with the same Deployment
+setup the app runs in production — dynamic Prow discovery with Sippy,
+explicit ART groups, accelerated history backfill, read-only JIRA, a
+mounted Konflux reader kubeconfig and the injected trusted CA. It holds
+no credentials: the Secrets it references are created separately.
+
+```bash
+# Build and push the image, then point deploy/app.yaml's image at it.
+oc create secret generic release-readiness-jira \
+  --from-literal=JIRA_EMAIL=<email> --from-literal=JIRA_TOKEN=<token>
+oc create secret generic release-readiness-konflux-kubeconfig \
+  --from-file=kubeconfig=<minified reader kubeconfig>
+# Optional: release-readiness-gitlab, release-readiness-github (key: token).
+oc apply -n <namespace> -f deploy/app.yaml
+```
+
+The Kustomize flow below generates the same Deployment from `base/` with
+per-environment values and generated Secrets; use whichever fits. Keep the
+two in sync when the Deployment changes.
+
 ## Prepare configuration
 
 From the repository root:
