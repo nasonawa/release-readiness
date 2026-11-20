@@ -75,7 +75,6 @@ export default function ReleasePortfolio() {
 	const product = params.get("product") || "all",
 		query = params.get("q") || "";
 	const history = params.get("history") === "1";
-	const available = params.get("available") === "1";
 	const narrow = useNarrow();
 	function change(key: string, value: string) {
 		setParams((prev) => {
@@ -86,7 +85,7 @@ export default function ReleasePortfolio() {
 		});
 	}
 	const path = (ov: ReleaseOverview) =>
-		`/releases/${encodeURIComponent(ov.release.name)}?${new URLSearchParams({ layout, ...(product !== "all" ? { product } : {}), ...(history ? { history: "1" } : {}), ...(available ? { available: "1" } : {}), ...(query ? { q: query } : {}) })}`;
+		`/releases/${encodeURIComponent(ov.release.name)}?${new URLSearchParams({ layout, ...(product !== "all" ? { product } : {}), ...(history ? { history: "1" } : {}), ...(query ? { q: query } : {}) })}`;
 	const ticket = (ov: ReleaseOverview) =>
 		ov.release.release_ticket_key ? (
 			<a
@@ -153,13 +152,11 @@ export default function ReleasePortfolio() {
 					.toLowerCase()
 					.includes(query.toLowerCase()),
 		);
-	// The table keeps one row per upcoming release; the switch adds the
-	// streams whose every release is already published.
-	const rows =
-		layout === "table" && !available
-			? filtered.filter((ov) => ov.next_in_stream || !ov.published)
-			: filtered;
+	// Both views show the same set: upcoming releases plus each stream's
+	// latest published z-stream, so a stream like 3.9 whose every release
+	// shipped still shows its newest one. History adds earlier z-streams.
 	const staged = stageReleases(filtered, history);
+	const rows = staged;
 	return (
 		<PageSection className="rr-page">
 			<div className="rr-portfolio-heading">
@@ -208,30 +205,17 @@ export default function ReleasePortfolio() {
 					value={query}
 					onChange={(_, v) => change("q", v)}
 				/>
-				{layout === "table" ? (
-					<Switch
-						id="show-available-releases"
-						label="Show available releases"
-						isChecked={available}
-						onChange={(_, v) => change("available", v ? "1" : "")}
-					/>
-				) : (
-					<Switch
-						id="release-history"
-						label="Show history"
-						isChecked={history}
-						onChange={(_, v) => change("history", v ? "1" : "")}
-					/>
-				)}
+				<Switch
+					id="release-history"
+					label="Show history"
+					isChecked={history}
+					onChange={(_, v) => change("history", v ? "1" : "")}
+				/>
 			</div>
 			<p className="rr-muted rr-scope-note">
-				{layout === "table"
-					? available
-						? "Showing every recorded release, including published ones."
-						: "Showing upcoming releases. Enable Show available releases for published ones."
-					: history
-						? "Showing all recorded z-streams, including earlier releases."
-						: "Showing upcoming releases and the latest published z-stream in each stream. Enable history for earlier releases."}
+				{history
+					? "Showing all recorded z-streams, including earlier releases."
+					: "Showing upcoming releases and the latest published z-stream in each stream. Enable history for earlier releases."}
 			</p>
 			{!(layout === "table" ? rows.length : staged.length) && (
 				<EmptyState
@@ -393,9 +377,11 @@ function ReleaseRow({
 						</span>
 						<span style={nowrap}>{assignee}</span>
 					</Flex>
-					<div style={{ marginTop: "0.25rem" }}>
-						<ValidationProgress data={ov.portfolio?.validation} />
-					</div>
+					{!ov.published && (
+						<div style={{ marginTop: "0.25rem" }}>
+							<ValidationProgress data={ov.portfolio?.validation} />
+						</div>
+					)}
 				</Td>
 			</Tr>
 		);
@@ -406,7 +392,11 @@ function ReleaseRow({
 				<StatusLabel ov={ov} />
 			</Td>
 			<Td dataLabel="Validation">
-				<ValidationProgress data={ov.portfolio?.validation} />
+				{ov.published ? (
+					dash
+				) : (
+					<ValidationProgress data={ov.portfolio?.validation} />
+				)}
 			</Td>
 			<Td dataLabel="Due date">
 				<ShipDate ov={ov} />

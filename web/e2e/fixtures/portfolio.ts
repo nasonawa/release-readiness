@@ -97,7 +97,38 @@ export async function mockPortfolio(page: Page) {
 					shipped: path.includes("3.18.3"),
 					candidate: null,
 					reason: "No staged candidate",
-					fbc_candidate: null,
+					// The in-flight release has a selected FBC; shipped ones do not.
+					fbc_candidate: path.includes("3.18.4")
+						? {
+								source: "stage_snapshots",
+								state: "complete",
+								pullspecs: ["quay.io/ocp-art-tenant/art-fbc@sha256:selected"],
+								operators: [
+									{
+										operator: "quay-operator",
+										head_bundle_nvr: "quay-operator-bundle-3.18.4",
+										fbc_ri_stage: "none",
+										image_check: { bundle_digest: "sha256:bundle" },
+										images: [],
+										conflicts: [],
+										missing_ocp: [],
+										members: [
+											{
+												nvr: "quay-operator-fbc-3.18.4-selected",
+												digest: "sha256:selected",
+												pullspec: "quay.io/ocp-art-tenant/art-fbc@sha256:selected",
+												build_url: "",
+												head_bundle_nvr: "quay-operator-bundle-3.18.4",
+												head_bundle_digest: "sha256:bundle",
+												ocp: "4.18",
+												release: null,
+												ci: null,
+											},
+										],
+									},
+								],
+							}
+						: null,
 					fbc_stream: null,
 					verdict: { state: "not_ready", items: [] },
 					reading: { read: 0, failed: 0, pending: 0, history_days: 0 },

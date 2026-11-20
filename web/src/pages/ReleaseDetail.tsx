@@ -262,9 +262,12 @@ export default function ReleaseDetail() {
 					panelContent={
 						ciCell === "all" || ciCell === "job" ? (
 							<JobHistoryDrawer
-								key={`${version}:${ciCell}:${params.get("job") || ""}`}
+								key={`${version}:${ciCell}:${params.get("job") || ""}:${candidate.data?.fbc_candidate ? "fbc" : "nofbc"}`}
 								version={version!}
 								job={ciCell === "job" ? params.get("job") || "" : ""}
+								hasSelectedFBCs={(
+									candidate.data?.fbc_candidate?.operators ?? []
+								).some((op) => (op.members?.length ?? 0) > 0)}
 								onClose={() =>
 									setParams(
 										(prev) => {
@@ -305,6 +308,7 @@ export default function ReleaseDetail() {
 						<DetailBreadcrumb name={release.name} />
 						<ReleaseWorkspace
 							release={release}
+							config={config}
 							candidate={candidate.data}
 							freshness={<Freshness data={candidate.data} />}
 							facts={

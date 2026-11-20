@@ -23,13 +23,18 @@ import { Status } from "./Status";
 export default function JobHistoryDrawer({
 	version,
 	job,
+	hasSelectedFBCs,
 	onClose,
 }: {
 	version: string;
 	job: string;
+	/** Whether the release has selected FBCs to scope runs to. */
+	hasSelectedFBCs: boolean;
 	onClose: () => void;
 }) {
-	const [includeOther, setIncludeOther] = useState(false);
+	// A release with no selected FBCs starts on all runs: there is nothing
+	// to scope to, and flipping after the first fetch flickers.
+	const [includeOther, setIncludeOther] = useState(!hasSelectedFBCs);
 	const [cursors, setCursors] = useState<string[]>([""]);
 	const [page, setPage] = useState(1);
 	const cursor = cursors[page - 1] || "";
@@ -37,13 +42,7 @@ export default function JobHistoryDrawer({
 		`job-history:${version}:${job}:${includeOther}:${cursor}`,
 		() => getCIHistory(version, job, includeOther, cursor),
 	);
-	// Streams whose runs all tested another or unverified FBC have an empty
-	// selected scope: open on all runs rather than on nothing.
-	const selectedEmpty =
-		!includeOther && !history.loading && (history.data?.runs.length ?? 0) === 0;
-	useEffect(() => {
-		if (selectedEmpty) setIncludeOther(true);
-	}, [selectedEmpty]);
+
 	useEffect(() => {
 		const close = (event: KeyboardEvent) => {
 			// Escape aimed at an open popover or select must not close the

@@ -9,23 +9,38 @@ import {
 	TabTitleText,
 	Title,
 } from "@patternfly/react-core";
+import {
+	CodeBranchIcon,
+	JiraIcon,
+	OpenshiftIcon,
+	TasksIcon,
+} from "@patternfly/react-icons";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getValidation, listReleaseVersions } from "../api/client";
 import type {
+	DashboardConfig,
 	ReleaseCandidate,
 	ReleaseDetail,
 	Validation,
 	ValidationRow,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { formatReleaseName } from "../utils/links";
+import {
+	ART_PIPELINES_HEALTH_URL,
+	formatReleaseName,
+	jiraSearchUrl,
+	konfluxUrl,
+	ticketsJql,
+} from "../utils/links";
+import { streamIdentity } from "../utils/portfolio";
 import LoadError, { Loading } from "./LoadError";
 import ValidationProgress from "./ValidationProgress";
 
 export default function ReleaseWorkspace({
 	release,
+	config,
 	candidate,
 	facts,
 	builds,
@@ -33,6 +48,7 @@ export default function ReleaseWorkspace({
 	freshness,
 }: {
 	release: ReleaseDetail;
+	config?: DashboardConfig;
 	candidate?: ReleaseCandidate;
 	facts: ReactNode;
 	builds: ReactNode;
@@ -59,6 +75,18 @@ export default function ReleaseWorkspace({
 			next.delete("cell");
 			return next;
 		});
+	const stream = streamIdentity(release.name);
+	const konflux = konfluxUrl(
+		config?.konflux_ui_url || "",
+		config?.konflux_namespace || "",
+		release.konflux_application || "",
+	);
+	const jira = config?.jira_base_url
+		? jiraSearchUrl(
+				ticketsJql(config.jira_project, release.name),
+				config.jira_base_url,
+			)
+		: null;
 	const blockers =
 		candidate?.verdict.items.filter((i) => i.level === "blocker") || [];
 	const published = release.published === true;
@@ -106,6 +134,34 @@ export default function ReleaseWorkspace({
 					</select>
 				</label>
 			</div>
+			<nav aria-label="Release sources" className="rr-source-links">
+				{stream.product === "quay" && (
+					<a
+						href={`https://sippy.dptools.openshift.org/sippy-ng/release/quay-${stream.version}`}
+						target="_blank"
+						rel="noreferrer"
+					>
+						<TasksIcon aria-hidden />
+						Sippy ↗
+					</a>
+				)}
+				{konflux && (
+					<a href={konflux} target="_blank" rel="noreferrer">
+						<OpenshiftIcon aria-hidden />
+						Konflux ↗
+					</a>
+				)}
+				<a href={ART_PIPELINES_HEALTH_URL} target="_blank" rel="noreferrer">
+					<CodeBranchIcon aria-hidden />
+					ART pipelines ↗
+				</a>
+				{jira && (
+					<a href={jira} target="_blank" rel="noreferrer">
+						<JiraIcon aria-hidden />
+						JIRA ↗
+					</a>
+				)}
+			</nav>
 			<Tabs
 				activeKey={active}
 				onSelect={(_, key) => select(String(key))}
