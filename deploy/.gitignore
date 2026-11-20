@@ -1,5 +1,3 @@
 .env
-.generated/
 *.kubeconfig
 __pycache__/
-.prepare-*/

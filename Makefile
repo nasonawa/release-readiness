@@ -11,7 +11,7 @@ REVISION := $(shell git rev-parse HEAD)
 export RR_ENV_FILE := $(abspath $(ENV_FILE))
 COMPOSE = $(DOCKER) compose --env-file "$(ENV_FILE)"
 
-.PHONY: help up down logs ps deps build-web test test-go test-web test-e2e test-deploy lint build push
+.PHONY: help up down logs ps deps build-web test test-go test-web test-e2e lint build push
 
 help:
 	@printf '%s\n' \
@@ -20,7 +20,7 @@ help:
 	  'make logs        Follow local app logs' \
 	  'make ps          Show local app status' \
 	  'make deps        Install frontend dependencies and Playwright Chromium' \
-	  'make test        Run Go, web, browser, and deployment tests' \
+	  'make test        Run Go, web, and browser tests' \
 	  'make lint        Run Go and web linters' \
 	  'make build       Build the Docker image' \
 	  'make push        Push an already-built image; does not build or deploy' \
@@ -46,7 +46,7 @@ deps:
 build-web:
 	npm --prefix web run build
 
-test: test-go test-web test-e2e test-deploy
+test: test-go test-web test-e2e
 
 test-go: build-web
 	go test ./...
@@ -59,9 +59,6 @@ test-web:
 test-e2e:
 	npm --prefix web run typecheck:e2e
 	npm --prefix web run test:e2e
-
-test-deploy:
-	python3 -m unittest discover -s deploy -p 'test_*.py'
 
 lint:
 	golangci-lint run

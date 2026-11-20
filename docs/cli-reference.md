@@ -16,15 +16,14 @@ The three entry points intentionally expose different interfaces:
 - **Binary:** all flags below; use `release-readiness -help` for executable help.
 - **Local Compose:** loads repository-root `.env`. Its `RR_*` substitutions control
   port, data mount, discovery, Sippy URL, and ART groups. See `compose.yaml`.
-- **OpenShift:** `deploy/configure.py` accepts only keys in
-  [`deploy/.env.example`](../deploy/.env.example). It rejects source URL, worker,
-  and token-file overrides. [`deploy/base/app.env`](../deploy/base/app.env)
-  contains fixed deployment defaults; the Deployment maps values without native
-  environment support into flags. See [deployment instructions](../deploy/README.md).
+- **OpenShift:** [`deploy/app.yaml`](../deploy/app.yaml) sets the deployed
+  defaults, mapping values without native environment support into flags;
+  Secrets are referenced by name and created separately. See the
+  [deployment instructions](../deploy/README.md).
 
-Both supplied deployments enable dynamic Prow discovery and Sippy, poll CI every
-2 minutes, configure Quay ART groups, and force JIRA writes off. Binary defaults
-below are not automatically the deployed values.
+The supplied deployment enables dynamic Prow discovery and Sippy, configures
+Quay ART groups, and keeps JIRA read-only. Binary defaults below are not
+automatically the deployed values.
 
 ## Flags
 

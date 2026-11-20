@@ -62,12 +62,9 @@ Use an image built from the current code. Replace `your-org` in the example
 and access controls. In the intended application-cluster context:
 
 ```bash
-cp deploy/.env.example deploy/.env
-chmod 600 deploy/.env
-# Fill the supported settings and credential paths in deploy/.env.
-python3 deploy/configure.py
-oc project your-namespace  # Match NAMESPACE in deploy/.env.
-oc apply -k deploy/.generated
+# Create the Secrets from deploy/README.md, set the image in deploy/app.yaml,
+# then:
+oc apply -n your-namespace -f deploy/app.yaml
 oc -n your-namespace rollout status deployment/release-readiness --timeout=300s
 oc -n your-namespace get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
 ```
@@ -102,9 +99,9 @@ Use a unique tag or digest for reproducible production rollouts.
 ## Test
 
 For a fresh checkout, run `make deps` once. `make test` builds the embedded web
-bundle and runs Go tests/vet, web unit tests/lint, Playwright, and deployment
-render tests. Individual targets are `test-go`, `test-web`, `test-e2e`, and
-`test-deploy`; `make lint` also runs golangci-lint. The equivalent direct commands
+bundle and runs Go tests/vet, web unit tests/lint, and Playwright. Individual
+targets are `test-go`, `test-web`, and `test-e2e`; `make lint` also runs
+golangci-lint. The equivalent direct commands
 are:
 
 ```bash
