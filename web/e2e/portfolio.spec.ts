@@ -491,9 +491,7 @@ test("job history scopes FBCs, pages through stored runs and closes back to work
 		page.getByRole("heading", { name: "All CI history", exact: true }),
 	).toBeVisible();
 	// The remounted drawer's first request lands shortly after its heading.
-	await expect
-		.poll(() => requests.at(-1) ?? "")
-		.not.toContain("job=");
+	await expect.poll(() => requests.at(-1) ?? "").not.toContain("job=");
 	await page.setViewportSize({ width: 420, height: 850 });
 	await expect(
 		page.getByRole("button", { name: "Close drawer panel" }),

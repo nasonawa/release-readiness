@@ -116,7 +116,8 @@ export async function mockPortfolio(page: Page) {
 											{
 												nvr: "quay-operator-fbc-3.18.4-selected",
 												digest: "sha256:selected",
-												pullspec: "quay.io/ocp-art-tenant/art-fbc@sha256:selected",
+												pullspec:
+													"quay.io/ocp-art-tenant/art-fbc@sha256:selected",
 												build_url: "",
 												head_bundle_nvr: "quay-operator-bundle-3.18.4",
 												head_bundle_digest: "sha256:bundle",

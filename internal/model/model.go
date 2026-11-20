@@ -30,7 +30,7 @@ type ReleaseOverview struct {
 	Shipped bool `json:"shipped"`
 	// Published is set when the catalog lists a released version's tag:
 	// the confirmation customers can pull it. It implies Shipped.
-	Published bool `json:"published"`
+	Published bool            `json:"published"`
 	Portfolio *PortfolioFacts `json:"portfolio,omitempty"`
 	// ShippedAt is when the catalog first published the version, nil when
 	// it has not or gave no date.
