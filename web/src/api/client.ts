@@ -10,7 +10,9 @@ import type {
 	Validation,
 } from "./types";
 
-const BASE = "/api/v1";
+// import.meta.env.BASE_URL carries the Vite base ("/" or e.g. "/v2/")
+// so API calls follow the prefix the app is served under.
+const BASE = `${import.meta.env.BASE_URL}api/v1`;
 
 async function fetchJSON<T>(url: string): Promise<T> {
 	const res = await fetch(url);
