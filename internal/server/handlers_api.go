@@ -56,12 +56,14 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	_, published := s.selector.CatalogShippedAt(version)
+	_, catalogShipped := s.selector.CatalogShippedAt(version)
 	writeJSON(w, http.StatusOK, struct {
 		*model.ReleaseVersion
 		Published  bool              `json:"published"`
 		ShipmentMR *model.ShipmentMR `json:"shipment_mr"`
-	}{release, published, mr})
+		// The same gate as the overview: the catalog confirms a release
+		// JIRA has marked released; a catalog push alone ships nothing.
+	}{release, catalogShipped && release.Released, mr})
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
@@ -158,8 +160,8 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 			IssueSummary: summary,
 			Readiness:    computeReadiness(&rel, latest != nil, catalogShipped, time.Now()),
 			LatestBuild:  latest,
-			Shipped:      catalogShipped || rel.Released,
-			Published:    catalogShipped,
+			Shipped:      rel.Released,
+			Published:    catalogShipped && rel.Released,
 			ShipmentMR:   mrs[rel.Name],
 		}
 		if !shippedAt.IsZero() {
@@ -237,9 +239,6 @@ func markNextInStream(overviews []model.ReleaseOverview) {
 func computeReadiness(release *model.ReleaseVersion, hasSnapshot, catalogShipped bool, now time.Time) model.ReadinessResponse {
 	if release.Released {
 		return model.ReadinessResponse{Signal: "green", Message: "Released"}
-	}
-	if catalogShipped {
-		return model.ReadinessResponse{Signal: "green", Message: "Shipped"}
 	}
 
 	var signal, message string

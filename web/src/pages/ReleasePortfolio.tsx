@@ -469,7 +469,7 @@ const exact = (iso: string) =>
  */
 function ShipDate({ ov }: { ov: ReleaseOverview }) {
 	const r = ov.release;
-	const shipped = r.released || !!ov.shipped_at;
+	const shipped = ov.shipped || r.released;
 	if (shipped)
 		return (
 			<Tooltip
