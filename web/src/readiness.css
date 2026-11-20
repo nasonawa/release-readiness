@@ -24,11 +24,9 @@ body {
 }
 .rr-page h1 {
 	font-family: "Red Hat Display", sans-serif;
-	font-size: 2rem;
 }
 .rr-muted {
 	color: var(--rr-muted);
-	font-size: 0.9rem;
 }
 .rr-portfolio-heading,
 .rr-card-heading,
@@ -85,7 +83,7 @@ body {
 .rr-release-card h2,
 .rr-release-card h3 {
 	font:
-		600 1.4rem / 1.4 "Red Hat Display",
+		600 var(--pf-t--global--font--size--body--lg) / 1.4 "Red Hat Display",
 		sans-serif;
 }
 .rr-release-card h2 a,
@@ -94,13 +92,6 @@ body {
 }
 .rr-card-heading {
 	gap: 0.6rem;
-}
-.rr-card-target {
-	margin: 1rem 0;
-}
-.rr-card-target strong {
-	display: block;
-	font-size: 1.1rem;
 }
 .rr-progress-track {
 	height: 9px;
@@ -163,7 +154,6 @@ body {
 .rr-stage-heading p,
 .rr-stage-heading span {
 	color: var(--rr-muted);
-	font-size: 0.9rem;
 }
 .rr-stage-lane.shipment .rr-stage-heading {
 	border-color: var(--rr-green);
@@ -379,4 +369,17 @@ table .rr-validation-progress {
 	background: var(--rr-panel);
 	color: inherit;
 	max-width: 14rem;
+}
+
+/* Release source links under the version header. */
+.rr-source-links {
+	display: flex;
+	gap: 0.7rem 1.3rem;
+	flex-wrap: wrap;
+	margin: 1rem 0 1.5rem;
+}
+.rr-workspace .rr-source-links a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
 }

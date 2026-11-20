@@ -13,12 +13,15 @@ test("release table groups z-streams into stages and preserves navigation", asyn
 	await expect(
 		page.getByRole("heading", { name: "Release portfolio", exact: true }),
 	).toBeVisible();
-	// Upcoming releases only until available ones are asked for.
+	// Upcoming releases plus each stream's latest published one.
 	await expect(
 		page.locator("table[aria-label='Releases'] tbody tr"),
-	).toHaveCount(2);
+	).toHaveCount(3);
 	await expect(
 		page.getByRole("link", { name: "Quay v3.18.4", exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("link", { name: "Quay v3.18.3", exact: true }),
 	).toBeVisible();
 	await expect(page.getByText("Mock evidence")).toHaveCount(0);
 	await page.getByRole("button", { name: "Stages", exact: true }).click();
@@ -341,7 +344,7 @@ test("source freshness uses only the shared hook polling interval", async ({
 	expect(requests).toBeLessThanOrEqual(2);
 });
 
-test("table reveals available releases on demand and retains the choice", async ({
+test("table and stages share one release set with history on demand", async ({
 	page,
 }) => {
 	const published = structuredClone(releases[1]);
@@ -350,41 +353,38 @@ test("table reveals available releases on demand and retains the choice", async 
 		route.fulfill({ json: [...releases, published] }),
 	);
 	await page.goto("/");
-	const toggle = page.getByRole("switch", {
-		name: "Show available releases",
-	});
-	await expect(toggle).not.toBeChecked();
-	await expect(
-		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
-	).toHaveCount(0);
-	await page.getByText("Show available releases", { exact: true }).click();
-	await expect(toggle).toBeChecked();
+	// A stream whose every release shipped still shows its newest one.
 	await expect(
 		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
 	).toBeVisible();
+	// Earlier published z-streams wait for history.
+	await expect(
+		page.getByRole("link", { name: "Quay v3.18.2", exact: true }),
+	).toHaveCount(0);
+	await page.getByText("Show history", { exact: true }).click();
+	await expect(
+		page.getByRole("link", { name: "Quay v3.18.2", exact: true }),
+	).toBeVisible();
 	await page.getByRole("button", { name: "Stages", exact: true }).click();
-	await expect(toggle).toHaveCount(0);
 	await expect(
 		page.getByRole("heading", { name: "Quay v3.17.9", exact: true }),
 	).toBeVisible();
+	await expect(
+		page.getByRole("switch", { name: "Show history", exact: true }),
+	).toBeChecked();
 	await page.getByRole("button", { name: "Table", exact: true }).click();
-	await expect(toggle).toBeChecked();
 	await page.getByRole("link", { name: "Quay v3.18.4", exact: true }).click();
 	await page.getByRole("link", { name: "All releases", exact: true }).click();
-	await expect(toggle).toBeChecked();
-	await page.getByText("Show available releases", { exact: true }).click();
-	await expect(toggle).not.toBeChecked();
-	await page
-		.getByRole("textbox", { name: "Find a release or ticket" })
-		.fill("3.17");
 	await expect(
-		page.getByText("Try another product, version or ticket."),
-	).toBeVisible();
-	await page.getByText("Show available releases", { exact: true }).click();
-	await expect(toggle).toBeChecked();
+		page.getByRole("switch", { name: "Show history", exact: true }),
+	).toBeChecked();
+	await page.getByText("Show history", { exact: true }).click();
 	await expect(
-		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
-	).toBeVisible();
+		page.getByRole("switch", { name: "Show history", exact: true }),
+	).not.toBeChecked();
+	await expect(
+		page.getByRole("link", { name: "Quay v3.18.2", exact: true }),
+	).toHaveCount(0);
 });
 
 test("job history scopes FBCs, pages through stored runs and closes back to workbench", async ({
@@ -490,7 +490,10 @@ test("job history scopes FBCs, pages through stored runs and closes back to work
 	await expect(
 		page.getByRole("heading", { name: "All CI history", exact: true }),
 	).toBeVisible();
-	expect(requests.at(-1)).not.toContain("job=");
+	// The remounted drawer's first request lands shortly after its heading.
+	await expect
+		.poll(() => requests.at(-1) ?? "")
+		.not.toContain("job=");
 	await page.setViewportSize({ width: 420, height: 850 });
 	await expect(
 		page.getByRole("button", { name: "Close drawer panel" }),
