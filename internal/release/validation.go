@@ -179,7 +179,7 @@ func EvaluateValidation(plan ValidationPlan, candidate *model.ReleaseCandidate, 
 		}
 		if r.CompletedAt != nil && (r.State == "success" || r.State == "failure" || r.State == "error" || r.State == "aborted") {
 			old := completedByJob[r.JobName]
-			if old == nil || r.CompletedAt.After(*old.CompletedAt) || (r.CompletedAt.Equal(*old.CompletedAt) && r.State != "success") {
+			if old == nil || r.CompletedAt.After(*old.CompletedAt) || (r.CompletedAt.Equal(*old.CompletedAt) && (r.State != "success" || r.InstallFailed)) {
 				completedByJob[r.JobName] = r
 			}
 		} else if r.State == "pending" || r.State == "running" || r.State == "triggered" {

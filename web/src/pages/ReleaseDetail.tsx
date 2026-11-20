@@ -305,9 +305,7 @@ export default function ReleaseDetail() {
 						<DetailBreadcrumb name={release.name} />
 						<ReleaseWorkspace
 							release={release}
-							config={config}
 							candidate={candidate.data}
-							candidateError={candidate.error}
 							freshness={<Freshness data={candidate.data} />}
 							facts={
 								<ReleaseFacts
@@ -459,31 +457,42 @@ function ReleaseFacts({
 			autoFitMinModifier={{ default: "8rem", lg: "9rem" }}
 			style={{ marginBottom: "1.5rem" }}
 		>
-			<DescriptionListGroup>
-				<DescriptionListTerm>Due date</DescriptionListTerm>
-				<DescriptionListDescription>
-					{dueDate ? (
-						<Tooltip content={dueSource(release)}>
-							{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
-							<span tabIndex={0}>{dueDate.date}</span>
-						</Tooltip>
-					) : (
-						"TBD"
-					)}
-					{dueDate?.kind === "past" && (
-						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
-							Past due
-						</Label>
-					)}
-					{dueDate?.kind === "soon" && (
-						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
-							{dueDate.days === 0
-								? "Due today"
-								: `Due in ${days(dueDate.days)}`}
-						</Label>
-					)}
-				</DescriptionListDescription>
-			</DescriptionListGroup>
+			{/* A shipped release has no target left to show. */}
+			{!shipped && (
+				<DescriptionListGroup>
+					<DescriptionListTerm>Due date</DescriptionListTerm>
+					<DescriptionListDescription>
+						{dueDate ? (
+							<Tooltip content={dueSource(release)}>
+								{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+								<span tabIndex={0}>{dueDate.date}</span>
+							</Tooltip>
+						) : (
+							"TBD"
+						)}
+						{dueDate?.kind === "past" && (
+							<Label
+								status="warning"
+								isCompact
+								style={{ marginLeft: "0.5rem" }}
+							>
+								Past due
+							</Label>
+						)}
+						{dueDate?.kind === "soon" && (
+							<Label
+								status="warning"
+								isCompact
+								style={{ marginLeft: "0.5rem" }}
+							>
+								{dueDate.days === 0
+									? "Due today"
+									: `Due in ${days(dueDate.days)}`}
+							</Label>
+						)}
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			)}
 			{ticket && (
 				<DescriptionListGroup>
 					<DescriptionListTerm>Ticket</DescriptionListTerm>
@@ -566,6 +575,10 @@ function BuildsCard({
 }) {
 	const [linkParams] = useSearchParams();
 	const ciParams = new URLSearchParams(linkParams);
+	// A surviving cell or job param would reopen a popover or drawer over
+	// the workbench this link opens.
+	ciParams.delete("cell");
+	ciParams.delete("job");
 	ciParams.set("ci", "all");
 	ciParams.set("view", "workbench");
 	const fbc = data?.fbc_candidate;
@@ -1086,6 +1099,8 @@ function FbcChecks({
 }) {
 	const [linkParams] = useSearchParams();
 	const ciParams = new URLSearchParams(linkParams);
+	ciParams.delete("cell");
+	ciParams.delete("job");
 	ciParams.set("view", "workbench");
 	ciParams.set("ci", `${row.operator}@${row.ocp}`);
 	const unread = row.flags.find((x) => x.text === "can't read");
@@ -1607,6 +1622,16 @@ function TicketsCard({
 				/>
 				{hasIssues ? (
 					<IssuesTable issues={work} />
+				) : query && (issues?.length ?? 0) > 0 ? (
+					// The filter matched nothing; the release still has tickets.
+					<EmptyState variant="xs" headingLevel="h4" titleText="No results">
+						<EmptyStateBody>
+							No ticket matches &ldquo;{query}&rdquo;.
+						</EmptyStateBody>
+						<Button variant="link" onClick={() => setQuery("")}>
+							Clear filter
+						</Button>
+					</EmptyState>
 				) : error ? (
 					<LoadError
 						variant="xs"

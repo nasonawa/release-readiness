@@ -75,37 +75,47 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 	if h.BackfillInterval <= 0 || (!h.lastBackfill.IsZero() && h.now().Sub(h.lastBackfill) < h.BackfillInterval) {
 		return
 	}
-	groups := append(slices.Clone(active), historical...)
-	slices.Sort(groups)
-	if len(groups) == 0 {
+	// Active groups backfill on every visit, so a candidate FBC older than
+	// the refresh window is stored without waiting for the rotation;
+	// historical-only groups rotate one per visit.
+	targets := slices.Clone(active)
+	if len(historical) > 0 {
+		targets = append(targets, historical[h.backfillCursor%len(historical)])
+		h.backfillCursor++
+	}
+	if len(targets) == 0 {
 		return
 	}
-	group := groups[h.backfillCursor%len(groups)]
-	h.backfillCursor++
 	budget = h.BackfillBudget
 	if budget <= 0 {
 		budget = 30 * time.Second
 	}
 	backfill, stop := context.WithTimeout(ctx, budget)
 	started = time.Now()
-	err = h.backfillGroup(backfill, group, slices.Contains(active, group))
+	var backfillPass syncstatus.Pass
+	for _, group := range targets {
+		backfillPass.Add(h.backfillGroup(backfill, group, slices.Contains(active, group)))
+		if errors.Is(backfill.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			break
+		}
+	}
 	// Source metadata is best effort too; it cannot extend the history budget.
-	if err == nil {
+	if backfillPass.Err() == nil {
 		var sources syncstatus.Pass
 		h.backfillSources(backfill, &sources)
-		err = errors.Join(sources.Err(), backfill.Err())
+		backfillPass.Add(errors.Join(sources.Err(), backfill.Err()))
 	}
 	budgetExhausted := errors.Is(backfill.Err(), context.DeadlineExceeded) && ctx.Err() == nil
 	stop()
 	h.lastBackfill = h.now()
 	if budgetExhausted {
-		h.logger.Info("ART backfill paused", "group", group, "duration_ms", time.Since(started).Milliseconds(), "reason", "time budget exhausted")
+		h.logger.Info("ART backfill paused", "groups", targets, "duration_ms", time.Since(started).Milliseconds(), "reason", "time budget exhausted")
 		return
 	}
-	h.BackfillStatus.Report(err)
-	h.logger.Info("ART backfill synced", "group", group, "duration_ms", time.Since(started).Milliseconds(), "failed", err != nil)
-	if err != nil {
-		h.logger.Warn("ART backfill incomplete", "group", group, "error", err)
+	h.BackfillStatus.Report(backfillPass.Err())
+	h.logger.Info("ART backfill synced", "groups", targets, "duration_ms", time.Since(started).Milliseconds(), "failed", backfillPass.Err() != nil)
+	if backfillPass.Err() != nil {
+		h.logger.Warn("ART backfill incomplete", "error", backfillPass.Err())
 	}
 }
 
@@ -130,18 +140,25 @@ func (h *HistorySync) backfillGroup(ctx context.Context, group string, active bo
 		first = refreshDays
 	}
 	count := 0
+	var failed error
 	for day := first; day < historyDays && count < backfillPerPass; day++ {
 		date := h.now().UTC().AddDate(0, 0, -day).Format(time.DateOnly)
 		if day >= refreshDays && slices.Contains(scanned, date) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
-			return err
+			return errors.Join(failed, err)
 		}
 		if err := h.scanAndMark(ctx, group, date); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return errors.Join(failed, err)
+			}
+			// A failed day is not marked scanned, so a later visit retries
+			// it, but this visit reads on: the day still counts toward the
+			// per-pass budget.
+			failed = errors.Join(failed, err)
 		}
 		count++
 	}
-	return ctx.Err()
+	return errors.Join(failed, ctx.Err())
 }

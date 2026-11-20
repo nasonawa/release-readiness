@@ -1,9 +1,10 @@
 import {
-	Alert,
-	Button,
-	Checkbox,
 	EmptyState,
 	EmptyStateBody,
+	Flex,
+	FormSelect,
+	FormSelectOption,
+	Icon,
 	Label,
 	PageSection,
 	Switch,
@@ -11,24 +12,34 @@ import {
 	Title,
 	ToggleGroup,
 	ToggleGroupItem,
+	Tooltip,
 } from "@patternfly/react-core";
-import { ColumnsIcon, ThLargeIcon } from "@patternfly/react-icons";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import {
+	CheckCircleIcon,
+	ColumnsIcon,
+	ExclamationTriangleIcon,
+	ExternalLinkAltIcon,
+	InfoCircleIcon,
+	TimesCircleIcon,
+} from "@patternfly/react-icons";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { Link, useSearchParams } from "react-router-dom";
 import { listReleasesOverview } from "../api/client";
 import type { ReleaseOverview } from "../api/types";
 import LoadError, { Loading } from "../components/LoadError";
+import { useNarrow } from "../components/OperatorImages";
 import ValidationProgress from "../components/ValidationProgress";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
+import { day, days, due } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 import {
-	groupStreams,
 	portfolioLabel,
 	releaseStage,
 	stageReleases,
 	streamIdentity,
 } from "../utils/portfolio";
+import { dueSource } from "../utils/releaseDetail";
 
 const stages = [
 	{
@@ -50,6 +61,10 @@ const stages = [
 	},
 ] as const;
 
+const muted = { color: "var(--pf-t--global--text--color--subtle)" };
+const dash = <span style={muted}>–</span>;
+const nowrap = { whiteSpace: "nowrap" } as const;
+
 export default function ReleasePortfolio() {
 	const { data, error, refetch } = useCachedFetch(
 		"portfolio",
@@ -57,20 +72,12 @@ export default function ReleasePortfolio() {
 	);
 	const config = useConfig();
 	const [params, setParams] = useSearchParams();
-	const layout = params.get("layout") === "stages" ? "stages" : "cards";
+	const layout = params.get("layout") === "stages" ? "stages" : "table";
 	const product = params.get("product") || "all",
 		query = params.get("q") || "";
 	const history = params.get("history") === "1";
 	const available = params.get("available") === "1";
-	const host = useRef<HTMLDivElement>(null);
-	const before = useRef(new Map<string, DOMRect>());
-	const animations = useRef<Animation[]>([]);
-	const stopMotion = useCallback(() => {
-		animations.current.forEach((a) => {
-			a.cancel();
-		});
-		animations.current = [];
-	}, []);
+	const narrow = useNarrow();
 	function change(key: string, value: string) {
 		setParams((prev) => {
 			const next = new URLSearchParams(prev);
@@ -79,72 +86,8 @@ export default function ReleasePortfolio() {
 			return next;
 		});
 	}
-	function switchLayout(next: string) {
-		if (next === layout) return;
-		before.current.clear();
-		host.current
-			?.querySelectorAll<HTMLElement>("[data-release]")
-			.forEach((node) => {
-				const rect = node.getBoundingClientRect();
-				before.current.set(node.dataset.release!, rect);
-				if (!before.current.has(node.dataset.stream!))
-					before.current.set(node.dataset.stream!, rect);
-			});
-		stopMotion();
-		change("layout", next);
-	}
-	useLayoutEffect(() => {
-		if (!before.current.size || !host.current) return;
-		const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-		if (!reduced) {
-			host.current
-				.querySelectorAll<HTMLElement>("[data-release]")
-				.forEach((node) => {
-					const from =
-						before.current.get(node.dataset.release!) ||
-						before.current.get(node.dataset.stream!);
-					if (!from) return;
-					const to = node.getBoundingClientRect();
-					const a = node.animate(
-						[
-							{
-								transform: `translate(${from.x - to.x}px,${from.y - to.y}px) scale(${from.width / to.width},${from.height / to.height})`,
-								transformOrigin: "top left",
-								zIndex: 2,
-							},
-							{ transform: "none", transformOrigin: "top left", zIndex: 2 },
-						],
-						{ duration: 560, easing: "cubic-bezier(.22,1,.36,1)" },
-					);
-					animations.current.push(a);
-				});
-			if (layout === "stages")
-				host.current
-					.querySelectorAll(".rr-stage-heading,.rr-stage-empty")
-					.forEach((node) => {
-						animations.current.push(
-							node.animate([{ opacity: 0 }, { opacity: 1 }], {
-								duration: 300,
-								delay: 140,
-								fill: "backwards",
-							}),
-						);
-					});
-		}
-		before.current.clear();
-	}, [layout]);
-	useEffect(() => {
-		const media = matchMedia("(prefers-reduced-motion: reduce)");
-		window.addEventListener("resize", stopMotion);
-		media.addEventListener("change", stopMotion);
-		return () => {
-			stopMotion();
-			window.removeEventListener("resize", stopMotion);
-			media.removeEventListener("change", stopMotion);
-		};
-	}, [stopMotion]);
 	const path = (ov: ReleaseOverview) =>
-		`/releases/${encodeURIComponent(ov.release.name)}?${new URLSearchParams({ layout, product, ...(history ? { history: "1" } : {}), ...(available ? { available: "1" } : {}), ...(query ? { q: query } : {}) })}`;
+		`/releases/${encodeURIComponent(ov.release.name)}?${new URLSearchParams({ layout, ...(product !== "all" ? { product } : {}), ...(history ? { history: "1" } : {}), ...(available ? { available: "1" } : {}), ...(query ? { q: query } : {}) })}`;
 	const ticket = (ov: ReleaseOverview) =>
 		ov.release.release_ticket_key ? (
 			<a
@@ -155,7 +98,7 @@ export default function ReleasePortfolio() {
 				target="_blank"
 				rel="noreferrer"
 			>
-				{ov.release.release_ticket_key} ↗
+				{ov.release.release_ticket_key} <ExternalLinkAltIcon />
 			</a>
 		) : (
 			<span className="rr-muted">No release ticket</span>
@@ -163,14 +106,7 @@ export default function ReleasePortfolio() {
 	function facts(ov: ReleaseOverview) {
 		return (
 			<>
-				{ov.published ? (
-					<p className="rr-muted">
-						Published{" "}
-						{ov.shipped_at
-							? new Date(ov.shipped_at).toLocaleDateString()
-							: "date unavailable"}
-					</p>
-				) : (
+				{!ov.published && (
 					<ValidationProgress data={ov.portfolio?.validation} />
 				)}
 				{ov.published &&
@@ -182,25 +118,7 @@ export default function ReleasePortfolio() {
 					<span>{ticket(ov)}</span>
 					<span>{ov.release.release_ticket_assignee || "Unassigned"}</span>
 				</div>
-				{!ov.published && (
-					<p className="rr-muted">
-						Target:{" "}
-						{ov.release.due_date || ov.release.release_date
-							? new Date(
-									ov.release.due_date || ov.release.release_date!,
-								).toLocaleDateString(undefined, {
-									year: "numeric",
-									month: "short",
-									day: "numeric",
-									timeZone: "UTC",
-								})
-							: "Not scheduled"}
-					</p>
-				)}
-				<Link className="rr-card-action" to={path(ov)}>
-					{ov.published ? "View release & FBC record" : "View release briefing"}{" "}
-					→
-				</Link>
+				<ShipDate ov={ov} />
 			</>
 		);
 	}
@@ -222,19 +140,26 @@ export default function ReleasePortfolio() {
 	const products = [
 		...new Set(data.map((ov) => streamIdentity(ov.release.name).product)),
 	].sort();
-	const filtered = data.filter(
-		(ov) =>
-			(product === "all" ||
-				streamIdentity(ov.release.name).product === product) &&
-			`${ov.release.name} ${ov.release.release_ticket_key || ""}`
-				.toLowerCase()
-				.includes(query.toLowerCase()),
-	);
-	const allGroups = groupStreams(filtered);
-	const groups =
-		layout === "cards" && !available
-			? allGroups.filter((g) => g.releases.some((r) => !r.published))
-			: allGroups;
+	const filtered = [...data]
+		.sort((a, b) =>
+			b.release.name.localeCompare(a.release.name, undefined, {
+				numeric: true,
+			}),
+		)
+		.filter(
+			(ov) =>
+				(product === "all" ||
+					streamIdentity(ov.release.name).product === product) &&
+				`${ov.release.name} ${ov.release.release_ticket_key || ""}`
+					.toLowerCase()
+					.includes(query.toLowerCase()),
+		);
+	// The table keeps one row per upcoming release; the switch adds the
+	// streams whose every release is already published.
+	const rows =
+		layout === "table" && !available
+			? filtered.filter((ov) => ov.next_in_stream || !ov.published)
+			: filtered;
 	const staged = stageReleases(filtered, history);
 	return (
 		<PageSection className="rr-page">
@@ -244,81 +169,54 @@ export default function ReleasePortfolio() {
 						Release portfolio
 					</Title>
 					<p className="rr-muted">
-						{layout === "cards"
-							? "Follow each product stream and its next release."
+						{layout === "table"
+							? "One row per release; open it for builds, validation and issues."
 							: "Follow individual releases from validation to customer availability."}
 					</p>
 				</div>
 				<ToggleGroup aria-label="Release portfolio view">
 					<ToggleGroupItem
-						text="Cards"
-						icon={<ThLargeIcon />}
-						isSelected={layout === "cards"}
-						onChange={() => switchLayout("cards")}
+						text="Table"
+						isSelected={layout === "table"}
+						onChange={() => change("layout", "")}
 					/>
 					<ToggleGroupItem
 						text="Stages"
 						icon={<ColumnsIcon />}
 						isSelected={layout === "stages"}
-						onChange={() => switchLayout("stages")}
+						onChange={() => change("layout", "stages")}
 					/>
 				</ToggleGroup>
 			</div>
-			{error && (
-				<Alert
-					variant="warning"
-					isInline
-					title="Showing previously loaded releases"
-				>
-					<Button variant="link" onClick={refetch}>
-						Retry refresh
-					</Button>
-				</Alert>
-			)}
-			<div className="rr-portfolio-summary">
-				<div>
-					<strong>{groups.length}</strong>
-					<span>Product streams</span>
-				</div>
-				{stages.map((s) => (
-					<div key={s.key}>
-						<strong>
-							{staged.filter((ov) => releaseStage(ov) === s.key).length}
-						</strong>
-						<span>{s.title}</span>
-					</div>
-				))}
-			</div>
 			<div className="rr-portfolio-tools">
-				<label>
-					Product
-					<select
-						value={product}
-						onChange={(e) => change("product", e.target.value)}
-					>
-						<option value="all">All products</option>
-						{products.map((p) => (
-							<option key={p} value={p}>
-								{p === "quay" ? "Quay" : p.toUpperCase()}
-							</option>
-						))}
-					</select>
-				</label>
+				<FormSelect
+					aria-label="Product"
+					value={product}
+					onChange={(_, v) => change("product", v === "all" ? "" : v)}
+				>
+					<FormSelectOption key="all" value="all" label="All products" />
+					{products.map((p) => (
+						<FormSelectOption
+							key={p}
+							value={p}
+							label={p === "quay" ? "Quay" : p.toUpperCase()}
+						/>
+					))}
+				</FormSelect>
 				<TextInput
 					aria-label="Find a release or ticket"
 					placeholder="Find a release or ticket"
 					value={query}
 					onChange={(_, v) => change("q", v)}
 				/>
-				{layout === "cards" && (
-					<Checkbox
+				{layout === "table" ? (
+					<Switch
 						id="show-available-releases"
 						label="Show available releases"
 						isChecked={available}
-						onChange={(_, checked) => change("available", checked ? "1" : "")}
+						onChange={(_, v) => change("available", v ? "1" : "")}
 					/>
-				)}
-				{layout === "stages" && (
+				) : (
 					<Switch
 						id="release-history"
 						label="Show history"
@@ -328,151 +226,325 @@ export default function ReleasePortfolio() {
 				)}
 			</div>
 			<p className="rr-muted rr-scope-note">
-				{layout === "cards"
-					? "Cards group x.y streams. Open a z-stream to see its exact builds, validation and issues."
+				{layout === "table"
+					? available
+						? "Showing every recorded release, including published ones."
+						: "Showing upcoming releases. Enable Show available releases for published ones."
 					: history
 						? "Showing all recorded z-streams, including earlier releases."
 						: "Showing upcoming releases and the latest published z-stream in each stream. Enable history for earlier releases."}
 			</p>
-			{!(layout === "cards" ? groups.length : staged.length) && (
+			{!(layout === "table" ? rows.length : staged.length) && (
 				<EmptyState
 					titleText={data.length ? "No matching releases" : "No releases yet"}
 					headingLevel="h2"
 				>
 					<EmptyStateBody>
 						{data.length
-							? layout === "cards" && !available
-								? "Try another search or enable Show available releases."
-								: "Try another product, version or ticket."
+							? "Try another product, version or ticket."
 							: "Releases appear when JIRA sync discovers them. Source status is available in the header."}
 					</EmptyStateBody>
 				</EmptyState>
 			)}
-			<div ref={host} className="rr-portfolio-content">
-				{layout === "cards" ? (
-					<div className="rr-card-grid">
-						{groups.map((g) => (
-							<article
-								className="rr-release-card"
-								key={g.key}
-								data-release={g.featured.release.name}
-								data-stream={g.key}
-							>
+			{layout === "table" ? (
+				<Table aria-label="Releases" variant="compact" gridBreakPoint="">
+					<Thead>
+						{narrow ? (
+							<Tr>
+								<Th>Release</Th>
+							</Tr>
+						) : (
+							<Tr>
+								<Th width={20}>Release</Th>
+								<Th width={15}>Status</Th>
+								<Th width={30}>Validation</Th>
+								<Th width={15}>Due date</Th>
+								<Th width={10}>Ticket</Th>
+								<Th width={10}>Assignee</Th>
+							</Tr>
+						)}
+					</Thead>
+					<Tbody>
+						{rows.map((ov) => (
+							<ReleaseRow
+								key={ov.release.name}
+								ov={ov}
+								narrow={narrow}
+								href={path(ov)}
+							/>
+						))}
+					</Tbody>
+				</Table>
+			) : (
+				<div className="rr-stage-grid">
+					{stages.map((s, i) => (
+						<section
+							key={s.key}
+							className={`rr-stage-lane ${s.key}`}
+							aria-labelledby={`stage-${s.key}`}
+						>
+							<header className="rr-stage-heading">
 								<div className="rr-card-heading">
-									<h2>
-										<Link to={path(g.featured)}>
-											{g.product === "quay" ? "Quay" : g.product.toUpperCase()}{" "}
-											{g.version}
-										</Link>
-									</h2>
-									<Label
-										color={
-											g.featured.published
-												? "green"
-												: g.featured.portfolio?.validation.ready
-													? "blue"
-													: "grey"
-										}
-									>
-										{portfolioLabel(g.featured)}
-									</Label>
+									<span>Stage {i + 1}</span>
+									<span>
+										{staged.filter((ov) => releaseStage(ov) === s.key).length}{" "}
+										releases
+									</span>
 								</div>
-								<p className="rr-card-target">
-									{g.next ? "Next release" : "Latest release"}{" "}
-									<strong>{formatReleaseName(g.featured.release.name)}</strong>
-								</p>
-								{facts(g.featured)}
-								{g.latest && g.latest !== g.featured && (
-									<p className="rr-latest">
-										Available:{" "}
-										<Link to={path(g.latest)}>
-											{formatReleaseName(g.latest.release.name)}
-										</Link>
-									</p>
-								)}
-								<details className="rr-stream-history">
-									<summary>Z-stream details ({g.releases.length})</summary>
-									<ul>
-										{g.releases.map((ov) => (
-											<li key={ov.release.name}>
-												<Link to={path(ov)}>
-													{formatReleaseName(ov.release.name)}
-												</Link>
-												<span className="rr-muted">
-													{ov.published
-														? "Published"
-														: ov.next_in_stream
-															? "Next release"
-															: ov.release.released
-																? "Marked released"
-																: "Planned"}
-												</span>
-												{ticket(ov)}
-											</li>
-										))}
-									</ul>
-								</details>
-							</article>
-						))}
-					</div>
-				) : (
-					<div className="rr-stage-grid">
-						{stages.map((s, i) => (
-							<section
-								key={s.key}
-								className={`rr-stage-lane ${s.key}`}
-								aria-labelledby={`stage-${s.key}`}
-							>
-								<header className="rr-stage-heading">
-									<div className="rr-card-heading">
-										<span>Stage {i + 1}</span>
-										<span>
-											{staged.filter((ov) => releaseStage(ov) === s.key).length}{" "}
-											releases
-										</span>
+								<h2 id={`stage-${s.key}`}>{s.title}</h2>
+								<p>{s.description}</p>
+							</header>
+							<div className="rr-stage-items">
+								{staged
+									.filter((ov) => releaseStage(ov) === s.key)
+									.map((ov) => (
+										<article className="rr-release-card" key={ov.release.name}>
+											<div className="rr-card-heading">
+												<h3>
+													<Link to={path(ov)}>
+														{formatReleaseName(ov.release.name)}
+													</Link>
+												</h3>
+												<StatusLabel ov={ov} />
+											</div>
+											{facts(ov)}
+										</article>
+									))}
+								{!staged.some((ov) => releaseStage(ov) === s.key) && (
+									<div className="rr-stage-empty">
+										No releases in this stage.
 									</div>
-									<h2 id={`stage-${s.key}`}>{s.title}</h2>
-									<p>{s.description}</p>
-								</header>
-								<div className="rr-stage-items">
-									{staged
-										.filter((ov) => releaseStage(ov) === s.key)
-										.map((ov) => (
-											<article
-												className="rr-release-card"
-												key={ov.release.name}
-												data-release={ov.release.name}
-												data-stream={streamIdentity(ov.release.name).key}
-											>
-												<div className="rr-card-heading">
-													<h3>
-														<Link to={path(ov)}>
-															{formatReleaseName(ov.release.name)}
-														</Link>
-													</h3>
-													<Label color={ov.published ? "green" : "grey"}>
-														{portfolioLabel(ov)}
-													</Label>
-												</div>
-												{facts(ov)}
-											</article>
-										))}
-									{!staged.some((ov) => releaseStage(ov) === s.key) && (
-										<div className="rr-stage-empty">
-											No releases in this stage.
-										</div>
-									)}
-								</div>
-							</section>
-						))}
-					</div>
-				)}
-			</div>
+								)}
+							</div>
+						</section>
+					))}
+				</div>
+			)}
 			<p className="pf-v6-screen-reader" role="status">
-				{layout === "cards"
-					? `${groups.length} product stream cards`
+				{layout === "table"
+					? `${rows.length} releases`
 					: `${staged.length} z-stream releases grouped by stage`}
 			</p>
 		</PageSection>
+	);
+}
+
+/**
+ * One release's facts in a row: the link, its status icon and label, the
+ * required-validation progress, the target or shipped date with its flag,
+ * the ticket and the assignee.
+ */
+function ReleaseRow({
+	ov,
+	narrow,
+	href,
+}: {
+	ov: ReleaseOverview;
+	narrow: boolean;
+	href: string;
+}) {
+	const r = ov.release;
+	const release = (
+		<Flex
+			columnGap={{ default: "columnGapSm" }}
+			flexWrap={{ default: "nowrap" }}
+			alignItems={{ default: "alignItemsCenter" }}
+		>
+			<span style={nowrap}>
+				<Link to={href} style={{ fontWeight: 600 }}>
+					{formatReleaseName(r.name)}
+				</Link>
+			</span>
+		</Flex>
+	);
+	const ticketLink = r.release_ticket_key && (
+		<a
+			href={jiraIssueUrl(r.release_ticket_key, "https://redhat.atlassian.net")}
+			target="_blank"
+			rel="noreferrer"
+		>
+			{r.release_ticket_key} <ExternalLinkAltIcon />
+		</a>
+	);
+	const assignee = r.release_ticket_assignee || (
+		<span style={muted}>Unassigned</span>
+	);
+	if (narrow)
+		return (
+			<Tr>
+				<Td dataLabel="Release">
+					<Flex
+						justifyContent={{ default: "justifyContentSpaceBetween" }}
+						alignItems={{ default: "alignItemsCenter" }}
+						flexWrap={{ default: "wrap" }}
+						columnGap={{ default: "columnGapMd" }}
+					>
+						{release}
+						<ShipDate ov={ov} />
+					</Flex>
+					<Flex
+						columnGap={{ default: "columnGapMd" }}
+						alignItems={{ default: "alignItemsCenter" }}
+						flexWrap={{ default: "wrap" }}
+						style={{ marginTop: "0.25rem" }}
+					>
+						<StatusLabel ov={ov} />
+						<span style={nowrap}>
+							{ticketLink || <span style={muted}>No ticket</span>}
+						</span>
+						<span style={nowrap}>{assignee}</span>
+					</Flex>
+					<div style={{ marginTop: "0.25rem" }}>
+						<ValidationProgress data={ov.portfolio?.validation} />
+					</div>
+				</Td>
+			</Tr>
+		);
+	return (
+		<Tr>
+			<Td dataLabel="Release">{release}</Td>
+			<Td dataLabel="Status">
+				<StatusLabel ov={ov} />
+			</Td>
+			<Td dataLabel="Validation">
+				<ValidationProgress data={ov.portfolio?.validation} />
+			</Td>
+			<Td dataLabel="Due date">
+				<ShipDate ov={ov} />
+			</Td>
+			<Td dataLabel="Ticket">{ticketLink || dash}</Td>
+			<Td dataLabel="Assignee">{assignee}</Td>
+		</Tr>
+	);
+}
+
+/** The release's state as an icon and a status-coloured label. */
+function StatusLabel({ ov }: { ov: ReleaseOverview }) {
+	const label = portfolioLabel(ov);
+	const failed = (ov.portfolio?.validation.failed ?? 0) > 0;
+	const icon = ov.published ? (
+		<Icon status="success">
+			<CheckCircleIcon />
+		</Icon>
+	) : failed ? (
+		<Icon status="danger">
+			<TimesCircleIcon />
+		</Icon>
+	) : ov.portfolio?.validation.ready ? (
+		<Icon status="success">
+			<CheckCircleIcon />
+		</Icon>
+	) : ov.portfolio?.verdict ? (
+		<Icon status="info">
+			<InfoCircleIcon />
+		</Icon>
+	) : null;
+	const color = ov.published
+		? "green"
+		: ov.portfolio?.validation.ready
+			? "green"
+			: failed
+				? "red"
+				: ov.portfolio?.verdict
+					? "blue"
+					: "grey";
+	return (
+		<span
+			style={{
+				display: "inline-flex",
+				gap: "0.25rem",
+				alignItems: "center",
+			}}
+		>
+			{icon}
+			<Label color={color}>{label}</Label>
+		</span>
+	);
+}
+
+const exact = (iso: string) =>
+	`${new Date(iso).toLocaleString("en-US", {
+		timeZone: "UTC",
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	})} UTC`;
+
+/**
+ * Unshipped, the target date with its due flag, its Jira source in its
+ * tooltip; shipped, a check and the day the catalog first published it, the
+ * exact time in its tooltip.
+ */
+function ShipDate({ ov }: { ov: ReleaseOverview }) {
+	const r = ov.release;
+	const shipped = r.released || !!ov.shipped_at;
+	if (shipped)
+		return (
+			<Tooltip
+				content={
+					ov.shipped_at
+						? `Published to the Red Hat catalog ${exact(ov.shipped_at)}`
+						: "Shipped"
+				}
+			>
+				<span
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip.
+					tabIndex={0}
+					className="rr-ship-date"
+					style={{
+						...nowrap,
+						display: "inline-flex",
+						gap: "0.375rem",
+						alignItems: "center",
+					}}
+				>
+					<Icon status="success" isInline>
+						<CheckCircleIcon />
+					</Icon>
+					{ov.shipped_at ? `Shipped ${day(ov.shipped_at)}` : "Shipped"}
+				</span>
+			</Tooltip>
+		);
+	const target = r.due_date ?? r.release_date;
+	const d = target ? due(target, false) : undefined;
+	const flag =
+		d?.kind === "past"
+			? "Past due"
+			: d?.kind === "soon"
+				? d.days === 0
+					? "Due today"
+					: `Due in ${days(d.days)}`
+				: null;
+	return (
+		<span style={nowrap}>
+			{d ? (
+				<Tooltip content={dueSource(r)}>
+					{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+					<span tabIndex={0} className="rr-ship-date">
+						{d.date}
+					</span>
+				</Tooltip>
+			) : (
+				<span style={muted}>TBD</span>
+			)}
+			{flag && (
+				<span
+					style={{
+						marginLeft: "0.5rem",
+						display: "inline-flex",
+						gap: "0.25rem",
+						alignItems: "center",
+					}}
+				>
+					<Icon status="warning" isInline>
+						<ExclamationTriangleIcon />
+					</Icon>
+					{flag}
+				</span>
+			)}
+		</span>
 	);
 }

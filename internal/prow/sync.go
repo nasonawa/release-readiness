@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -266,13 +267,17 @@ func (s *Syncer) syncJobWindow(ctx context.Context, job Job, from, until time.Ti
 		}
 		run, err := s.fetchRunWindow(ctx, job, id, from, until)
 		if err != nil {
+			if errors.Is(err, errInvalidRun) {
+				s.logger.Warn("skip run", "job", job.Name, "run", id, "error", err)
+				continue
+			}
 			return n, fmt.Errorf("run %s: %w", id, err)
 		}
 		if run == nil {
 			continue
 		}
 		if !from.IsZero() && run.StartedAt != nil && run.StartedAt.Before(cutoff) {
-			continue
+			break // ids are newest first: everything after is older too
 		}
 		if !until.IsZero() && (run.StartedAt == nil || run.StartedAt.After(until)) {
 			continue
@@ -333,6 +338,11 @@ func (s *Syncer) expired(ctx context.Context, job string) (func(id string) bool,
 	}, len(runs) == 0, nil
 }
 
+// errInvalidRun marks a run whose stored data Prow rejected: a bad
+// finished.json or an unusable artifact target. The walk skips such a run
+// and continues; fetch errors still fail the pass.
+var errInvalidRun = errors.New("invalid run data")
+
 // fetchRun returns nil when the run has no readable prowjob.json yet.
 func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error) {
 	return s.fetchRunWindow(ctx, job, id, time.Time{}, time.Time{})
@@ -346,7 +356,7 @@ func (s *Syncer) fetchRunWindow(ctx context.Context, job Job, id string, from, u
 	}
 	run, target, err := parseRun(job, id, pjData, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errInvalidRun, err)
 	}
 	if !from.IsZero() && (run.StartedAt == nil || run.StartedAt.Before(from)) || !until.IsZero() && (run.StartedAt == nil || run.StartedAt.After(until)) {
 		return run, nil
@@ -358,7 +368,7 @@ func (s *Syncer) fetchRunWindow(ctx context.Context, job Job, id string, from, u
 	if finData != nil {
 		run, target, err = parseRun(job, id, pjData, finData)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errInvalidRun, err)
 		}
 	}
 	run.FetchedAt = time.Now().UTC()
@@ -367,7 +377,7 @@ func (s *Syncer) fetchRunWindow(ctx context.Context, job Job, id string, from, u
 		return run, nil
 	}
 	if !artifactTarget.MatchString(target) {
-		return nil, fmt.Errorf("invalid artifact target")
+		return nil, fmt.Errorf("%w: invalid artifact target", errInvalidRun)
 	}
 	artifacts := dir + "artifacts/" + target + "/quay-gather/artifacts/"
 	data, err := s.client.object(ctx, artifacts+"tested-images.json")
@@ -383,7 +393,10 @@ func (s *Syncer) fetchRunWindow(ctx context.Context, job Job, id string, from, u
 		return run, nil
 	}
 	if run.CompletedAt == nil {
-		return run, nil // active runs only need the exact identity artifact
+		// Active runs only need the exact identity artifact; the CSV
+		// fallback is not read yet, so the state stays missing.
+		run.ArtifactState = ArtifactMissing
+		return run, nil
 	}
 	if data, err = s.client.object(ctx, artifacts+"olm-csvs.yaml"); err != nil {
 		return nil, err

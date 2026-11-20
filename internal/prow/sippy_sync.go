@@ -158,7 +158,9 @@ func (s *SippySync) SyncOnce(ctx context.Context) error {
 		}
 		started := time.Now()
 		fetched := 0
-		pass.Add(workpool.Run(ctx, liveJobs, s.Workers, func(ctx context.Context, d JobDefinition) (int, error) {
+		// One worker: syncJobWindow stores as it walks, and the store
+		// contract does not promise concurrent writes.
+		pass.Add(workpool.Run(ctx, liveJobs, 1, func(ctx context.Context, d JobDefinition) (int, error) {
 			ctx, cancel := context.WithTimeout(ctx, s.streamBudget())
 			defer cancel()
 			return s.Artifacts.syncJobWindow(ctx, d.Job(), maxWindowStart(s.clock(), s.Retention, windows[d.Application], s.Lookback), s.clock())
@@ -265,7 +267,11 @@ func (s *SippySync) syncStream(ctx context.Context, app string, definitions []Jo
 		if len(batch) == 0 {
 			return nil
 		}
-		err := s.Store.UpsertProwRuns(ctx, batch)
+		// Persist even when the stream budget has just expired, so runs
+		// already fetched are stored rather than dropped and re-fetched.
+		storeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		err := s.Store.UpsertProwRuns(storeCtx, batch)
 		if err == nil {
 			persisted += len(batch)
 		}

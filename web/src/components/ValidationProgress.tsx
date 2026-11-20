@@ -4,8 +4,12 @@ export default function ValidationProgress({ data }: { data?: Validation }) {
 	if (!data?.plan_known)
 		return (
 			<div className="rr-validation-progress">
-				<div className="rr-progress-track" />
-				<p className="rr-muted">CI configuration unavailable</p>
+				{/* An absence, not a state: a dash, with the reason in a
+				 * tooltip. The masthead sync popover carries the source
+				 * detail behind it. */}
+				<p className="rr-muted" title="CI configuration unavailable">
+					&mdash;
+				</p>
 			</div>
 		);
 	if (data.total === 0)

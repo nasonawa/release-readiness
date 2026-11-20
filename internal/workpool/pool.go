@@ -86,8 +86,19 @@ func (p *Pacer) Wait(ctx context.Context, gap time.Duration) error {
 	case <-timer.C:
 		return ctx.Err()
 	case <-ctx.Done():
+		p.release(at, gap)
 		return ctx.Err()
 	}
+}
+
+// release gives a cancelled waiter's slot back, but only while no later
+// reservation exists: a slot nobody used must not delay the callers behind it.
+func (p *Pacer) release(at time.Time, gap time.Duration) {
+	p.mu.Lock()
+	if p.next.Equal(at.Add(gap)) {
+		p.next = at
+	}
+	p.mu.Unlock()
 }
 
 func maxTime(a, b time.Time) time.Time {

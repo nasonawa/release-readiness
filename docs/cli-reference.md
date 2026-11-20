@@ -32,6 +32,7 @@ below are not automatically the deployed values.
 |------|---------|---------|-------------|
 | `-addr` | — | `:8080` | Listen address |
 | `-db` | — | `dashboard.db` | SQLite database path |
+| `-base-path` | `BASE_PATH` | — | URL prefix the app is served under (e.g. `/v2`), stripped from requests before routing; the web bundle must be built with the matching `VITE_BASE` |
 | `-kubeconfig` | `KUBECONFIG` | — | Kubeconfig path (empty uses the in-cluster service account) |
 | `-namespace` | `KONFLUX_NAMESPACE` | `art-quay-tenant` | Konflux namespace to read Snapshots and Releases from |
 | `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |

@@ -12,13 +12,13 @@ import type {
 
 // import.meta.env.BASE_URL carries the Vite base, but builds render it
 // without a trailing slash ("/v2", while dev gives "/"), so normalize
-// before joining the API path.
-export function apiBase(baseUrl: string): string {
+// before joining any path.
+export function withBase(baseUrl: string, path: string): string {
 	const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-	return `${base}api/v1`;
+	return `${base}${path.replace(/^\//, "")}`;
 }
 
-const BASE = apiBase(import.meta.env.BASE_URL);
+const BASE = withBase(import.meta.env.BASE_URL, "api/v1");
 
 async function fetchJSON<T>(url: string): Promise<T> {
 	const res = await fetch(url);
