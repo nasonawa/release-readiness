@@ -39,12 +39,24 @@ export function useCachedFetch<T>(
 	useEffect(() => {
 		let disposed = false,
 			generation = 0;
+		let pending = false;
 		const load = (force = false) => {
 			const entry = cache.get(key) as CacheEntry<T> | undefined;
 			if (entry && !force && Date.now() - entry.timestamp < ttlMs) {
-				setResult({ key, data: entry.data, loading: false });
+				setResult((previous) => ({
+					key,
+					data: entry.data,
+					loading: false,
+					// Keep the last error until a fetch succeeds, so a
+					// failure banner does not blink away on every poll.
+					error: previous.key === key ? previous.error : undefined,
+				}));
 				return;
 			}
+			// A poll or focus refresh must not discard the request still in
+			// flight: a response slower than the interval would never render.
+			if (pending) return;
+			pending = true;
 			const request = ++generation;
 			setResult((previous) => ({
 				key,
@@ -54,11 +66,13 @@ export function useCachedFetch<T>(
 			fetcherRef
 				.current()
 				.then((data) => {
+					pending = false;
 					if (disposed || request !== generation) return;
 					cache.set(key, { data, timestamp: Date.now() });
 					setResult({ key, data, loading: false });
 				})
 				.catch((error) => {
+					pending = false;
 					if (disposed || request !== generation) return;
 					setResult((previous) => ({
 						...previous,

@@ -4,7 +4,7 @@ import { captureFullPage } from "./helpers/screenshots.ts";
 
 test.beforeEach(async ({ page }) => mockPortfolio(page));
 
-test("stream cards expand to z-stream stages and preserve navigation", async ({
+test("release table groups z-streams into stages and preserves navigation", async ({
 	page,
 }, testInfo) => {
 	const errors: string[] = [];
@@ -13,12 +13,12 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 	await expect(
 		page.getByRole("heading", { name: "Release portfolio", exact: true }),
 	).toBeVisible();
-	await expect(page.locator(".rr-card-grid article")).toHaveCount(2);
+	// Upcoming releases only until available ones are asked for.
 	await expect(
-		page.getByRole("heading", { name: "Quay 3.18", exact: true }),
-	).toBeVisible();
+		page.locator("table[aria-label='Releases'] tbody tr"),
+	).toHaveCount(2);
 	await expect(
-		page.getByRole("heading", { name: "OMR 2.0", exact: true }),
+		page.getByRole("link", { name: "Quay v3.18.4", exact: true }),
 	).toBeVisible();
 	await expect(page.getByText("Mock evidence")).toHaveCount(0);
 	await page.getByRole("button", { name: "Stages", exact: true }).click();
@@ -30,10 +30,11 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 		.getByRole("link")
 		.click();
 	await expect(
-		page.getByRole("heading", { name: "Available to customers", exact: true }),
+		page.getByRole("heading", { name: "Shipped FBC record", exact: true }),
 	).toBeVisible();
+	// A shipped release leads with its tickets on the briefing.
 	await expect(
-		page.getByRole("heading", { name: "FBC record for this release" }),
+		page.getByRole("link", { name: "PROJQUAY-999", exact: true }),
 	).toBeVisible();
 	await page
 		.getByRole("tab", { name: "Validation workbench", exact: true })
@@ -46,7 +47,7 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 		.selectOption("arm64");
 	await expect(page.getByText("GCP / GCS")).toBeVisible();
 	await expect(
-		page.getByRole("link", { name: "Install · ARM64 ↗", exact: true }),
+		page.getByRole("link", { name: "Install · ARM64", exact: true }),
 	).toBeVisible();
 	await expect(
 		page.getByText(
@@ -60,16 +61,18 @@ test("stream cards expand to z-stream stages and preserve navigation", async ({
 		),
 	).toBeVisible();
 	await expect(
-		page.getByRole("link", { name: "Open observed run ↗" }),
+		page.getByRole("link", { name: /Open observed run/ }),
 	).toHaveAttribute("href", "https://prow.example/run/other");
 	await expect(page.getByText("AWS / S3")).toHaveCount(0);
-	await page.getByRole("tab", { name: "JIRA issues", exact: true }).click();
+	await page
+		.getByRole("tab", { name: "Release briefing", exact: true })
+		.click();
 	await expect(
 		page.getByRole("link", { name: "PROJQUAY-999", exact: true }),
 	).toBeVisible();
 	await page.reload();
 	await expect(
-		page.getByRole("tab", { name: "JIRA issues", exact: true }),
+		page.getByRole("tab", { name: "Release briefing", exact: true }),
 	).toHaveAttribute("aria-selected", "true");
 	await page.getByRole("link", { name: "All releases", exact: true }).click();
 	await expect(
@@ -89,7 +92,6 @@ test("accessible controls, mobile layout and reduced motion", async ({
 	await page.goto("/");
 	await page.getByRole("button", { name: "Stages", exact: true }).click();
 	expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
-	await page.getByRole("button", { name: "Cards", exact: true }).click();
 	await page.getByRole("button", { name: "About this dashboard" }).click();
 	await expect(
 		page.getByText("Release readiness 2.0.0-dev", { exact: true }),
@@ -106,6 +108,7 @@ test("accessible controls, mobile layout and reduced motion", async ({
 	await expect(
 		page.getByRole("button", { name: "Switch to light theme" }),
 	).toBeVisible();
+	await page.getByRole("button", { name: "Table", exact: true }).click();
 	for (const width of [1440, 1024, 736, 390, 320]) {
 		await page.setViewportSize({ width, height: 1000 });
 		expect(
@@ -115,7 +118,7 @@ test("accessible controls, mobile layout and reduced motion", async ({
 			`No horizontal overflow at ${width}px`,
 		).toBe(true);
 	}
-	await captureFullPage(page, testInfo.outputPath("cards-mobile-dark.png"));
+	await captureFullPage(page, testInfo.outputPath("table-mobile-dark.png"));
 });
 
 test("no configured jobs differs from unavailable inventory", async ({
@@ -135,17 +138,16 @@ test("no configured jobs differs from unavailable inventory", async ({
 	);
 	await page.goto("/");
 	await expect(
-		page.locator(".rr-card-grid").getByText("No CI configured"),
+		page.locator("table[aria-label='Releases']").getByText("No CI configured"),
 	).toHaveCount(2);
-	await page
-		.getByRole("heading", { name: "Quay 3.18", exact: true })
-		.getByRole("link")
-		.click();
+	await page.getByRole("link", { name: "Quay v3.18.4", exact: true }).click();
 	await page
 		.getByRole("tab", { name: "Validation workbench", exact: true })
 		.click();
 	await expect(
-		page.getByRole("tabpanel").getByText("No CI configured", { exact: true }),
+		page
+			.getByRole("tabpanel")
+			.getByRole("heading", { name: /No CI configured/ }),
 	).toBeVisible();
 	await expect(
 		page.getByText("CI readiness cannot be established.", { exact: false }),
@@ -234,10 +236,7 @@ test("confirmed active CI is Running with compact evidence details", async ({
 		}),
 	);
 	await page.goto("/");
-	await page
-		.getByRole("heading", { name: "Quay 3.18", exact: true })
-		.getByRole("link")
-		.click();
+	await page.getByRole("link", { name: "Quay v3.18.4", exact: true }).click();
 	await page
 		.getByRole("tab", { name: "Validation workbench", exact: true })
 		.click();
@@ -295,14 +294,15 @@ test("observed CI success stays separate from selected-FBC readiness", async ({
 	await expect(
 		arm.getByText("Passed · newer FBC", { exact: true }),
 	).toBeVisible();
+	// The sentence sits in a tooltip; the label stays compact.
 	await expect(
-		arm.getByText("No matching run for selected FBC", { exact: true }),
-	).toBeVisible();
+		arm.locator('span[title="No matching run for selected FBC"]'),
+	).toHaveCount(1);
 	await expect(
 		table
 			.locator("tbody tr")
 			.filter({ hasText: "Install · RDS" })
-			.getByText("No matching run for selected FBC", { exact: true }),
+			.getByText("No run", { exact: true }),
 	).toBeVisible();
 	await expect(page.getByText("0 of 2", { exact: true })).toBeVisible();
 	await arm.locator("summary").click();
@@ -341,7 +341,7 @@ test("source freshness uses only the shared hook polling interval", async ({
 	expect(requests).toBeLessThanOrEqual(2);
 });
 
-test("cards reveal available streams on demand and retain the choice", async ({
+test("table reveals available releases on demand and retains the choice", async ({
 	page,
 }) => {
 	const published = structuredClone(releases[1]);
@@ -350,44 +350,40 @@ test("cards reveal available streams on demand and retain the choice", async ({
 		route.fulfill({ json: [...releases, published] }),
 	);
 	await page.goto("/");
-	const toggle = page.getByRole("checkbox", {
+	const toggle = page.getByRole("switch", {
 		name: "Show available releases",
 	});
 	await expect(toggle).not.toBeChecked();
 	await expect(
-		page.getByRole("heading", { name: "Quay 3.17", exact: true }),
+		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
 	).toHaveCount(0);
-	await expect(page.getByText("Available:", { exact: false })).toBeVisible();
-	await toggle.click();
+	await page.getByText("Show available releases", { exact: true }).click();
 	await expect(toggle).toBeChecked();
 	await expect(
-		page.getByRole("heading", { name: "Quay 3.17", exact: true }),
+		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
 	).toBeVisible();
 	await page.getByRole("button", { name: "Stages", exact: true }).click();
 	await expect(toggle).toHaveCount(0);
 	await expect(
 		page.getByRole("heading", { name: "Quay v3.17.9", exact: true }),
 	).toBeVisible();
-	await page.getByRole("button", { name: "Cards", exact: true }).click();
+	await page.getByRole("button", { name: "Table", exact: true }).click();
 	await expect(toggle).toBeChecked();
-	await page
-		.getByRole("heading", { name: "Quay 3.18", exact: true })
-		.getByRole("link")
-		.click();
+	await page.getByRole("link", { name: "Quay v3.18.4", exact: true }).click();
 	await page.getByRole("link", { name: "All releases", exact: true }).click();
 	await expect(toggle).toBeChecked();
-	await toggle.click();
+	await page.getByText("Show available releases", { exact: true }).click();
 	await expect(toggle).not.toBeChecked();
 	await page
 		.getByRole("textbox", { name: "Find a release or ticket" })
 		.fill("3.17");
 	await expect(
-		page.getByText("Try another search or enable Show available releases."),
+		page.getByText("Try another product, version or ticket."),
 	).toBeVisible();
-	await toggle.click();
+	await page.getByText("Show available releases", { exact: true }).click();
 	await expect(toggle).toBeChecked();
 	await expect(
-		page.getByRole("heading", { name: "Quay 3.17", exact: true }),
+		page.getByRole("link", { name: "Quay v3.17.9", exact: true }),
 	).toBeVisible();
 });
 

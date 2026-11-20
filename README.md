@@ -108,6 +108,7 @@ render tests. Individual targets are `test-go`, `test-web`, `test-e2e`, and
 are:
 
 ```bash
+npm --prefix web run build
 go test ./...
 go vet ./...
 golangci-lint run

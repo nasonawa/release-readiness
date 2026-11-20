@@ -12,6 +12,7 @@ import {
 	Switch,
 	Title,
 } from "@patternfly/react-core";
+import { ExternalLinkAltIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { useEffect, useState } from "react";
 import { getCIHistory } from "../api/client";
@@ -37,9 +38,18 @@ export default function JobHistoryDrawer({
 		`job-history:${version}:${job}:${includeOther}:${cursor}`,
 		() => getCIHistory(version, job, includeOther, cursor),
 	);
+	// Streams whose runs all tested another or unverified FBC have an empty
+	// selected scope: open on all runs rather than on nothing.
+	const selectedEmpty =
+		!includeOther && !history.loading && (history.data?.runs.length ?? 0) === 0;
+	useEffect(() => {
+		if (selectedEmpty) setIncludeOther(true);
+	}, [selectedEmpty]);
 	useEffect(() => {
 		const close = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
+			// Escape aimed at an open popover or select must not close the
+			// drawer behind it.
+			if (event.key === "Escape" && !event.defaultPrevented) {
 				event.preventDefault();
 				onClose();
 			}
@@ -61,7 +71,7 @@ export default function JobHistoryDrawer({
 	return (
 		<DrawerPanelContent
 			className="rr-job-history"
-			widths={{ default: "width_100", lg: "width_50" }}
+			widths={{ default: "width_100", lg: "width_33" }}
 			focusTrap={{ enabled: true }}
 		>
 			<DrawerHead>
@@ -166,7 +176,8 @@ export default function JobHistoryDrawer({
 											</details>
 										)}
 										<p className="rr-muted">
-											{runs.length} runs on this page ·{" "}
+											{runs.length} {runs.length === 1 ? "run" : "runs"} on this
+											page ·{" "}
 											{
 												runs.filter((r) => runResult(r.state).status === "done")
 													.length
@@ -235,7 +246,7 @@ export default function JobHistoryDrawer({
 																	rel="noreferrer"
 																	aria-label={`Open Prow run ${run.build_id}: ${started}`}
 																>
-																	{started} ↗
+																	{started} <ExternalLinkAltIcon />
 																</a>
 															) : (
 																started
@@ -255,7 +266,6 @@ export default function JobHistoryDrawer({
 							isStatic
 							page={page}
 							perPage={50}
-							perPageOptions={[{ title: "50", value: 50 }]}
 							itemCount={
 								history.data.next_cursor
 									? undefined

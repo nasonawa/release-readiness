@@ -26,6 +26,7 @@ import {
 import { lazy, Suspense, useEffect, useState } from "react";
 import {
 	BrowserRouter,
+	Link,
 	Navigate,
 	Route,
 	Routes,
@@ -33,6 +34,7 @@ import {
 	useSearchParams,
 } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
+import { withBase } from "./api/client";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
 import { useConfig } from "./hooks/useConfig";
@@ -91,12 +93,11 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 	const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
 	const header = (
-		// Give the brand and utility controls separate rows on narrow screens.
-		<Masthead display={{ default: "stack", md: "inline" }}>
+		<Masthead display={{ default: "inline" }}>
 			<MastheadMain>
 				<MastheadBrand>
-					<a
-						href="/"
+					<Link
+						to="/"
 						style={{
 							color: "inherit",
 							textDecoration: "none",
@@ -106,12 +107,16 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 							gap: 8,
 						}}
 					>
-						<img src="/favicon.png" alt="Quay" style={{ height: 32 }} />
-						<span>
+						<img
+							src={withBase(import.meta.env.BASE_URL, "favicon.png")}
+							alt="Quay"
+							style={{ height: 32 }}
+						/>
+						<span className="rr-brand-text">
 							Red Hat Quay
 							<small className="rr-brand-subtitle">Release readiness</small>
 						</span>
-					</a>
+					</Link>
 				</MastheadBrand>
 			</MastheadMain>
 			<MastheadContent>

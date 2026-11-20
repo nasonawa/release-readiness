@@ -71,3 +71,43 @@ func TestCancellationAndErrors(t *testing.T) {
 		t.Fatalf("error=%v writes=%d", err, written)
 	}
 }
+
+func TestPacerSpacesWaiters(t *testing.T) {
+	p := &Pacer{}
+	gap := 30 * time.Millisecond
+	if err := p.Wait(t.Context(), gap); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := p.Wait(t.Context(), gap); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed < gap-10*time.Millisecond {
+		t.Fatalf("second waiter started after %v, want ~%v", elapsed, gap)
+	}
+}
+
+func TestPacerGivesBackCancelledSlot(t *testing.T) {
+	p := &Pacer{}
+	gap := 50 * time.Millisecond
+	if err := p.Wait(t.Context(), gap); err != nil {
+		t.Fatal(err)
+	}
+	cancelCtx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- p.Wait(cancelCtx, gap) }()
+	time.Sleep(5 * time.Millisecond) // let the waiter take its slot
+	cancel()
+	if err := <-done; err == nil {
+		t.Fatal("cancelled wait succeeded")
+	}
+	// The cancelled slot was released: the next waiter starts within one
+	// gap of the first, not two.
+	start := time.Now()
+	if err := p.Wait(t.Context(), gap); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed > gap {
+		t.Fatalf("next waiter waited %v; the cancelled slot was not released", elapsed)
+	}
+}

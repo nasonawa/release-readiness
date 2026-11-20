@@ -20,7 +20,9 @@ func TestARTForegroundPrecedesBoundedHistoricalWork(t *testing.T) {
 	h.BackfillInterval = time.Hour
 	h.BackfillBudget = time.Second
 	h.SyncOnce(t.Context())
-	if len(f.searches) != 13 {
+	// Six foreground searches, then every active group backfills on the
+	// same visit (7 days each) plus one rotating historical group.
+	if len(f.searches) != 27 {
 		t.Fatalf("searches=%d", len(f.searches))
 	}
 	for _, q := range f.searches[:6] {
@@ -36,13 +38,14 @@ func TestARTForegroundPrecedesBoundedHistoricalWork(t *testing.T) {
 	if len(f.searches) != 6 {
 		t.Fatalf("backfill was not paced: %d", len(f.searches))
 	}
-	// Rotate through all groups, including historical-only streams.
+	// After the interval, active groups backfill again without waiting for
+	// the rotation, and the historical stream keeps its turn in it.
 	h.lastBackfill = h.now().Add(-2 * time.Hour)
 	h.SyncOnce(t.Context())
-	h.lastBackfill = h.now().Add(-2 * time.Hour)
-	h.SyncOnce(t.Context())
-	if !slices.ContainsFunc(f.searches, func(q url.Values) bool { return q.Get("group") == "quay-3.17" }) {
-		t.Fatal("history rotation starved a stream")
+	for _, group := range []string{"quay-3.16", "quay-5.0", "quay-3.17"} {
+		if !slices.ContainsFunc(f.searches, func(q url.Values) bool { return q.Get("group") == group }) {
+			t.Fatalf("backfill visit skipped %s", group)
+		}
 	}
 }
 

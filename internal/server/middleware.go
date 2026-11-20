@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 )
@@ -56,11 +57,18 @@ func (s *Server) stripBasePath(next http.Handler) http.Handler {
 			return
 		}
 		if r.URL.Path == base {
-			http.Redirect(w, r, base+"/", http.StatusPermanentRedirect)
+			target := base + "/"
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, target, http.StatusPermanentRedirect)
 			return
 		}
 		if rest, ok := strings.CutPrefix(r.URL.Path, base+"/"); ok {
-			r.URL.Path = "/" + rest
+			// Clean the remainder so the mux never answers with its own
+			// path-cleaning redirect, whose Location would point outside
+			// the prefix the route forwards.
+			r.URL.Path = path.Clean("/" + rest)
 		}
 		next.ServeHTTP(w, r)
 	})

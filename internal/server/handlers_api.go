@@ -172,6 +172,19 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 			ov := &overviews[i]
 			facts := &model.PortfolioFacts{Stage: "validation"}
 			ov.Portfolio = facts
+			if ov.Published {
+				// The stage is settled and the UI reads no verdict here, and
+				// ReleaseCandidate loads the application's full run history:
+				// the cost of this loop grows with releases times runs. Keep
+				// only the plan hint behind "No CI configured".
+				facts.Stage = "available"
+				plan := s.ValidationPlans[ov.Release.KonfluxApplication]
+				if s.InventoryPlans != nil {
+					plan = s.InventoryPlans.Plan(ov.Release.KonfluxApplication)
+				}
+				facts.Validation = model.Validation{PlanKnown: plan.Revision != "", Total: len(plan.Jobs)}
+				continue
+			}
 			candidate, runs, err := s.selector.ReleaseCandidate(ctx, &ov.Release)
 			if err != nil {
 				facts.Error = "Candidate evidence unavailable"

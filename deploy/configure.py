@@ -103,6 +103,8 @@ def prepare(env_path):
         image_spec['newName'], image_spec['digest'] = image.rsplit('@', 1)
     elif ':' in image.rsplit('/', 1)[-1]:
         image_spec['newName'], image_spec['newTag'] = image.rsplit(':', 1)
+        if not image_spec['newTag']:
+            raise ValueError('IMAGE must include an explicit tag or digest')
     else:
         raise ValueError('IMAGE must include an explicit tag or digest')
     files = {'credentials.env': ''.join(f'{k}={v}\n' for k, v in credentials.items()).encode(),

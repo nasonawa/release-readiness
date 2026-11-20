@@ -91,7 +91,8 @@ func (d *DB) CandidateWindowStartForVersions(ctx context.Context, app string, na
 }
 
 // SaveJobInventory publishes a complete revision atomically. Missing jobs are
-// retained as removed requirements, never silently erased from coverage.
+// retained as removed for audit, but are excluded from coverage by the plan
+// registry that consumes the inventory.
 func (d *DB) SaveJobInventory(ctx context.Context, jobs []prow.JobDefinition, revision string) error {
 	if len(jobs) == 0 || revision == "" {
 		return fmt.Errorf("refusing empty job inventory")

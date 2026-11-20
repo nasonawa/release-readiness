@@ -18,7 +18,8 @@ import (
 )
 
 // JobDefinition is a required periodic configuration, independent of its runs.
-// Removed entries stay in storage and remain unmet requirements until reviewed.
+// Removed entries stay in storage for audit but no longer count as
+// configured requirements.
 type JobDefinition struct {
 	Name, Application, Target, Revision, SourceURL, OCP, Cloud string
 	Removed                                                    bool
