@@ -98,9 +98,9 @@ Worker queues are bounded and cancellation-aware, with serial persistence within
 
 Each Prow stream logs total duration, Sippy duration/pages, GCS request count, cached/deferred runs and persisted results. ART logs phase durations, current days completed, and backfill failures. The validation API includes an `evidence` explanation on each job row. Missing results distinguish no ingested run, unavailable artifacts, unverified identity, a different FBC, and incomplete candidate correlation, with an observed-run link when available. Separately paced historical sources do not determine the header's foreground “Updated” time. Release pages show pending background history separately from current FBC loading, so history alone does not keep a loading spinner active.
 
-The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. In discovery mode the imported inventory selects jobs; `PROW_JOB_PATTERN` is only used by legacy name discovery when dynamic discovery is off.
+The GitHub API is used for the commit and directory indexes; public YAML files are fetched from commit-pinned raw URLs without forwarding the GitHub token. `GITHUB_TOKEN` is optional for public inventory access. In discovery mode the imported inventory selects the jobs.
 
-For local startup, run `docker compose up --build`. To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. To return to entirely legacy configuration, also set `RR_PROW_JOB_DISCOVERY=false` and supply `PROW_JOBS` or `PROW_JOB_PATTERN`. These overrides apply to local Compose only.
+For local startup, run `docker compose up --build`. To keep dynamic configuration but use the legacy GCS reader, set `RR_SIPPY_URL=''`. These overrides apply to local Compose only.
 
 Verification uses only loopback API mocks: `go test -race ./internal/prow ./internal/db ./internal/release ./internal/server ./internal/jira ./internal/artbuild ./internal/workpool`. Integration tests cover batching, persistent caches, late artifacts, pagination failures, candidate windows and inventory freshness. Local runtime source health is tracked separately from these deterministic mock tests.
 

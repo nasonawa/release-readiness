@@ -49,8 +49,6 @@ automatically the deployed values.
 | `-jira-write-email` | `JIRA_WRITE_EMAIL` | — | JIRA Cloud account email of the write credential |
 | `-jira-write-token` | `JIRA_WRITE_TOKEN` | — | JIRA Cloud API token of the write credential, separate from `-jira-token` |
 | `-stage-release-plan-pattern` | `STAGE_RELEASE_PLAN_PATTERN` | `^quay-advisory-stage-\d+-\d+$` | Regexp matching the Konflux ReleasePlan names whose successful Releases are image STAGE builds (explicit empty flag selects no staged build) |
-| `-prow-jobs` | `PROW_JOBS` | — | Periodic Prow jobs to ingest, as `job_name=konflux_application[,...]`, e.g. `periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18` |
-| `-prow-job-pattern` | `PROW_JOB_PATTERN` | — | `^`-anchored regexp of periodic Prow job names to discover each pass, with named groups `major` and `minor` that give the application `quay-<major>-<minor>`, e.g. `^periodic-ci-quay-quay-redhat-(?P<major>\d+)\.(?P<minor>\d+)-.+-nightly(-.+)?$`; a `-prow-jobs` entry for the same job wins |
 | `-prow-interval` | — | `15m` | Prow sync poll interval |
 | `-retention` | — | `720h` | Age past which data no release needs is pruned daily and not ingested: Snapshots not ART staged, shipped or the newest of their application, Failed Releases not of an ART staged Snapshot, Prow runs and unreferenced image caches (0 disables) |
 | `-catalog-url` | — | `https://catalog.redhat.com/api/containers/v1` | Red Hat container catalog API, checked hourly in the background to mark versions shipped (empty leaves JIRA's released flag as the only shipped signal) |

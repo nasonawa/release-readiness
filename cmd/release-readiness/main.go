@@ -69,8 +69,6 @@ func main() {
 	catalogURL := flag.String("catalog-url", "https://catalog.redhat.com/api/containers/v1", "Red Hat container catalog API URL (empty leaves JIRA's released flag as the only shipped signal)")
 
 	// Prow flags
-	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=konflux_application[,...] (e.g. ...-aws-s3-nightly=quay-3-18)")
-	prowJobPattern := flag.String("prow-job-pattern", os.Getenv("PROW_JOB_PATTERN"), "^-anchored regexp of periodic Prow job names to discover; its named groups major and minor give the application quay-<major>-<minor>, and a -prow-jobs entry overrides it")
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	// GitLab shipment MR flags
@@ -146,18 +144,6 @@ func main() {
 	if err != nil {
 		logger.Error("read validation plan", "error", err)
 		os.Exit(1)
-	}
-	prowJobList, err := prow.ParseJobs(*prowJobs)
-	if err != nil {
-		logger.Error("parse -prow-jobs", "error", err)
-		os.Exit(1)
-	}
-	var prowPattern *prow.JobPattern
-	if *prowJobPattern != "" {
-		if prowPattern, err = prow.ParseJobPattern(*prowJobPattern); err != nil {
-			logger.Error("parse -prow-job-pattern", "error", err)
-			os.Exit(1)
-		}
 	}
 	var stagePlans *regexp.Regexp
 	if *stagePlanPattern != "" {
@@ -304,17 +290,14 @@ func main() {
 		wg.Go(func() { reconciler.Run(ctx, 10*time.Minute) })
 	}
 
-	if len(prowJobList) > 0 || prowPattern != nil || *jobDiscovery {
-		logger.Info("prow sync enabled", "jobs", len(prowJobList), "pattern", *prowJobPattern, "interval", *prowInterval)
-		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
+	if *jobDiscovery {
+		logger.Info("prow sync enabled", "interval", *prowInterval)
+		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)
 		syncer.Retention = *retention
 		syncer.WindowStart = selector.CIWindowStart
 		syncer.Lookback = *ciLookback
-		syncer.Pattern = prowPattern
-		if *jobDiscovery {
-			syncer.Inventory = database
-		}
+		syncer.Inventory = database
 		if *sippyURL != "" {
 			indexed := &prow.SippySync{Client: prow.NewSippyClient(*sippyURL), Artifacts: syncer, Store: database, Activity: selector.IngestionActivity, WindowStart: selector.CIWindowStart, Status: syncer.Status, Workers: *ciWorkers, StreamBudget: *ciStreamBudget, Retention: *retention, Lookback: *ciLookback, LegacyInterval: *legacyInterval, HistoryInterval: *historyInterval, HistoryBudget: *historyBudget}
 			if *historyInterval > 0 {
