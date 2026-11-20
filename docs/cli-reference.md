@@ -22,7 +22,8 @@ The three entry points intentionally expose different interfaces:
   [deployment instructions](../deploy/README.md).
 
 The supplied deployment enables dynamic Prow discovery and Sippy, configures
-Quay ART groups, and keeps JIRA read-only. Binary defaults below are not
+Quay ART groups, and keeps JIRA read-only by default (the FBC JIRA
+writer is opt-in with its separate credential). Binary defaults below are not
 automatically the deployed values.
 
 ## Flags

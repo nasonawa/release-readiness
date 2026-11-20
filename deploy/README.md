@@ -3,8 +3,9 @@
 `app.yaml` is a generic sample manifest for the whole setup: the data
 PVC, the injected trusted CA, Service, HTTPS Route, and the Deployment
 the app runs with in production — dynamic Prow job discovery with
-Sippy, explicit ART groups, accelerated history backfill, read-only
-JIRA, and a mounted Konflux reader kubeconfig. It contains no
+Sippy, explicit ART groups, accelerated history backfill, JIRA read-only
+by default (the FBC JIRA writer is opt-in), and a mounted Konflux reader
+kubeconfig. It contains no
 credentials and no cluster-specific settings: Secrets are referenced by
 name only, and storage class, namespace, and route host stay with the
 deploying cluster.
@@ -51,6 +52,12 @@ deploying cluster.
 4. **Optional tokens:** `release-readiness-gitlab` and
    `release-readiness-github`, each with a `token` key, for shipment MRs
    and GitHub rate limits.
+
+5. **Optional, the FBC JIRA writer:** production runs it. Create
+   `release-readiness-jira-write` with `email` and `token` keys (a
+   credential separate from the read one), then set `JIRA_WRITE=true` on
+   the deployment — `app.yaml` already wires the optional secret refs.
+   Without it, the reconciler's proposed actions are logged only.
 
 ## Deploy
 
