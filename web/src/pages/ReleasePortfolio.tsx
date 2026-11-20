@@ -18,7 +18,6 @@ import {
 	CheckCircleIcon,
 	ColumnsIcon,
 	ExclamationTriangleIcon,
-	ExternalLinkAltIcon,
 	InfoCircleIcon,
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
@@ -98,7 +97,7 @@ export default function ReleasePortfolio() {
 				target="_blank"
 				rel="noreferrer"
 			>
-				{ov.release.release_ticket_key} <ExternalLinkAltIcon />
+				{ov.release.release_ticket_key} ↗
 			</a>
 		) : (
 			<span className="rr-muted">No release ticket</span>
@@ -363,7 +362,7 @@ function ReleaseRow({
 			target="_blank"
 			rel="noreferrer"
 		>
-			{r.release_ticket_key} <ExternalLinkAltIcon />
+			{r.release_ticket_key} ↗
 		</a>
 	);
 	const assignee = r.release_ticket_assignee || (

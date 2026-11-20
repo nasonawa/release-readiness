@@ -141,6 +141,14 @@ body {
 .rr-card-facts + p {
 	margin-top: 0.5rem;
 }
+/* Stage lanes sit in a three-column grid (shared with the old card grid
+ * before that view was removed). */
+.rr-stage-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 1.2rem;
+	align-items: start;
+}
 .rr-stage-heading {
 	border-top: 3px solid var(--rr-blue);
 	min-height: 10rem;
@@ -274,6 +282,22 @@ body {
 .rr-job-history .pf-v6-c-drawer__head {
 	border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* The history panel scrolls inside itself instead of lengthening the page:
+ * pinned in view, head fixed, body scrolling. */
+.rr-job-history {
+	position: sticky;
+	top: 1rem;
+	align-self: flex-start;
+	max-height: min(calc(100vh - 2rem), 50rem);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.rr-job-history .pf-v6-c-drawer__body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
 .rr-job-history code,
 .rr-history-nvr {
 	overflow-wrap: anywhere;
@@ -337,4 +361,22 @@ table .rr-validation-progress {
 .rr-ship-date {
 	display: inline-block;
 	padding-block: 0.25rem;
+}
+
+/* The version switcher: a native select, sized up for visibility. */
+.rr-version-switch {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	font-size: 0.875rem;
+	color: var(--rr-muted);
+}
+.rr-version-switch select {
+	font-size: 1rem;
+	padding: 0.375rem 1.5rem 0.375rem 0.75rem;
+	border: 1px solid var(--rr-line);
+	border-radius: 6px;
+	background: var(--rr-panel);
+	color: inherit;
+	max-width: 14rem;
 }

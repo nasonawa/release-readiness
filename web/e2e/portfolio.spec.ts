@@ -47,7 +47,7 @@ test("release table groups z-streams into stages and preserves navigation", asyn
 		.selectOption("arm64");
 	await expect(page.getByText("GCP / GCS")).toBeVisible();
 	await expect(
-		page.getByRole("link", { name: "Install · ARM64", exact: true }),
+		page.getByRole("link", { name: "Install · ARM64 ↗", exact: true }),
 	).toBeVisible();
 	await expect(
 		page.getByText(

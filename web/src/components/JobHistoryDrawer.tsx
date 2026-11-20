@@ -12,7 +12,6 @@ import {
 	Switch,
 	Title,
 } from "@patternfly/react-core";
-import { ExternalLinkAltIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { useEffect, useState } from "react";
 import { getCIHistory } from "../api/client";
@@ -246,7 +245,7 @@ export default function JobHistoryDrawer({
 																	rel="noreferrer"
 																	aria-label={`Open Prow run ${run.build_id}: ${started}`}
 																>
-																	{started} <ExternalLinkAltIcon />
+																	{started} ↗
 																</a>
 															) : (
 																started
