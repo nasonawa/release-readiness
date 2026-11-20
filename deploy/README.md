@@ -1,165 +1,117 @@
-# OpenShift deployment with Kustomize
+# Deploying Release Readiness on OpenShift
 
-This setup deploys the backend and embedded UI, a persistent SQLite volume,
-Service, HTTPS Route, injected trusted CA bundle, configuration, and
-credentials. It uses dynamic Prow periodic discovery; no static validation
-plan or generator matrix is required. JIRA writes are disabled.
+`app.yaml` is a generic sample manifest for the whole setup: the data
+PVC, the injected trusted CA, Service, HTTPS Route, and the Deployment
+the app runs with in production — dynamic Prow job discovery with
+Sippy, explicit ART groups, accelerated history backfill, read-only
+JIRA, and a mounted Konflux reader kubeconfig. It contains no
+credentials and no cluster-specific settings: Secrets are referenced by
+name only, and storage class, namespace, and route host stay with the
+deploying cluster.
 
-The example image is `quay.io/your-org/release-readiness:v2.2`. Replace
-`your-org` with your registry organization and build and publish the image from
-the current code before deployment. Replace `your-namespace` with your target
-OpenShift project throughout the configuration and commands. Preparing these
-files does not build an image or deploy anything.
+## What you need before deploying
 
-## Plain apply (single manifest)
+1. **An image.** Build and push it from this repository:
 
-[app.yaml](app.yaml) is a standalone manifest with the same Deployment
-setup the app runs in production — dynamic Prow discovery with Sippy,
-explicit ART groups, accelerated history backfill, read-only JIRA, a
-mounted Konflux reader kubeconfig and the injected trusted CA. It holds
-no credentials: the Secrets it references are created separately.
+   ```bash
+   make build IMAGE=quay.io/your-org/release-readiness:latest
+   make push  IMAGE=quay.io/your-org/release-readiness:latest
+   ```
+
+   Then set that reference as `image:` in `app.yaml`. To serve the app
+   under a URL prefix, build with `VITE_BASE=<prefix>` and set `BASE_PATH`
+   in `app.yaml` to the same value.
+
+2. **JIRA read credentials** (required — releases are discovered from
+   JIRA; without them the portfolio stays empty):
+
+   ```bash
+   oc create secret generic release-readiness-jira \
+     --from-literal=JIRA_EMAIL=<email> \
+     --from-literal=JIRA_TOKEN=<api-token>
+   ```
+
+3. **A Konflux reader kubeconfig** (required for snapshots, releases and
+   image scans). A self-contained, minified kubeconfig whose identity can
+   list Snapshots and Releases in `KONFLUX_NAMESPACE` and read Tekton
+   Results:
+
+   ```bash
+   oc --kubeconfig=<reader-context> config view --minify --flatten --raw \
+     > konflux-reader.kubeconfig
+   oc create secret generic release-readiness-konflux-kubeconfig \
+     --from-file=kubeconfig=konflux-reader.kubeconfig
+   rm konflux-reader.kubeconfig
+   ```
+
+   [rbac.yaml](rbac.yaml) documents the permissions that identity needs,
+   in the Konflux namespace. Bind them to whatever the kubeconfig holds —
+   a User, a Group, or a ServiceAccount.
+
+4. **Optional tokens:** `release-readiness-gitlab` and
+   `release-readiness-github`, each with a `token` key, for shipment MRs
+   and GitHub rate limits.
+
+## Deploy
 
 ```bash
-# Build and push the image, then point deploy/app.yaml's image at it.
-oc create secret generic release-readiness-jira \
-  --from-literal=JIRA_EMAIL=<email> --from-literal=JIRA_TOKEN=<token>
-oc create secret generic release-readiness-konflux-kubeconfig \
-  --from-file=kubeconfig=<minified reader kubeconfig>
-# Optional: release-readiness-gitlab, release-readiness-github (key: token).
 oc apply -n <namespace> -f deploy/app.yaml
+oc rollout status deployment/release-readiness -n <namespace>
+oc get route release-readiness -n <namespace> -o jsonpath='{.spec.host}{"\n"}'
 ```
 
-The Kustomize flow below generates the same Deployment from `base/` with
-per-environment values and generated Secrets; use whichever fits. Keep the
-two in sync when the Deployment changes.
+## What to verify after deploying
 
-## Prepare configuration
+Work through this list; every item is observable without cluster-admin
+access. An AI agent can check all of them with `oc` and `curl` alone.
 
-From the repository root:
+1. **The pod is healthy.** `oc get pods -n <namespace>` shows the pod
+   `Running` and ready; `curl https://<route>/api/v1/health` returns 200.
+   A crash loop here is usually a bad JIRA secret or an unreadable
+   kubeconfig volume.
 
-```bash
-cp deploy/.env.example deploy/.env
-chmod 600 deploy/.env
-```
+2. **JIRA sync works.** `curl https://<route>/api/v1/sync-status` lists
+   the `jira` source with a recent `last_success`. Then
+   `curl https://<route>/api/v1/releases/overview` returns releases —
+   an empty list with a healthy JIRA source means the JIRA project has
+   no open release tickets.
 
-Edit `deploy/.env`:
+3. **Konflux sync works.** The `konflux` source shows a recent
+   `last_success` and the pod log (`oc logs deployment/release-readiness`)
+   has no `Unauthorized` lines. A 401/403 here means the reader identity
+   lacks the RBAC in [rbac.yaml](rbac.yaml) — the Konflux namespace admin
+   must grant it.
 
-- `IMAGE`: full image reference with an explicit tag or digest.
-- `NAMESPACE`: target OpenShift project (replace the `your-namespace` placeholder).
-- `JIRA_EMAIL` and `JIRA_TOKEN`: read credentials.
-- `GITLAB_TOKEN`: required read access to shipment MRs.
-- `KONFLUX_KUBECONFIG`: path to a self-contained Konflux reader kubeconfig.
-- Optional `GITHUB_TOKEN` for GitHub rate limits.
-- Optional `IMAGE_PULL_SECRET_FILE`: Docker/Podman auth JSON for a private image.
-- Optional `ROUTE_HOST`, `STORAGE_CLASS`, `STORAGE_SIZE` (default `5Gi`).
+4. **The Prow inventory loaded.** The `prow-inventory` source has a
+   `last_success`, and the log line `imported periodic jobs` (or the
+   validation workbench on any release page) shows the discovered job
+   count. Zero jobs for a stream renders as "No CI configured" — that is
+   a data state, not an error.
 
-[.env.example](.env.example) is the complete set of supported deployment inputs.
-The script rejects keys absent from this template, including token-file variables
-and source/worker overrides. Omitted keys use the template defaults; required
-credentials and the Konflux kubeconfig path must be filled in. API tokens are
-supplied inline, while the kubeconfig and optional image-pull auth use file paths.
+5. **ART history is scanning.** The `art-history` source succeeds and
+   the log shows `ART scheduling` with the group list from `ART_GROUPS`
+   plus any snapshot-derived groups. An `ART waiting for stream
+   discovery` message means `ART_GROUPS` is empty and no snapshots are
+   stored yet.
 
-Source URLs, ART groups, project, worker counts, poll intervals, lookback, and
-history budgets remain internal defaults in [base/app.env](base/app.env).
-`PROW_JOB_DISCOVERY=true` and `JIRA_WRITE=false` remain enforced. No second
-application env file needs to be prepared. Use a dedicated deployment `.env`
-rather than passing an unrelated Compose env file with additional keys.
+6. **The catalog and shipment sources.** `catalog` and `shipment-mrs`
+   (the latter only with a GitLab token) show successes. Failures here
+   degrade specific fields — shipped dates, MR links — without breaking
+   the rest.
 
-The parser accepts `KEY=value`, comments on separate lines, and optional matching
-quotes. It does **not** execute shell code, expand variables, or interpret escapes.
-Relative credential paths resolve against the env file's directory; `~` is
-supported. Never put credentials in `base/app.env`, which is tracked in Git.
+7. **The route and theme.** Load `https://<route>/` once in a browser:
+   the portfolio table renders, the theme toggle works, and the browser
+   console is free of errors.
 
-Export only the required Konflux context (replace the context below):
+## Things to adjust per cluster
 
-```bash
-umask 077
-oc --context=YOUR_KONFLUX_READER_CONTEXT config view --minify --flatten --raw \
-  > deploy/konflux-reader.kubeconfig
-# In deploy/.env: KONFLUX_KUBECONFIG=konflux-reader.kubeconfig
-```
-
-The exported context must select the intended Konflux cluster and contain an
-embedded credential and CA, with no host file references or exec/login plugins.
-The app mounts it read-only. Its identity needs list access to Snapshots and
-Releases in `KONFLUX_NAMESPACE`; scans also need a bearer token and get/list
-permissions on Tekton Results `results` and `records`.
-
-[rbac.yaml](rbac.yaml) documents those resource permissions, but is intentionally
-excluded from this Kustomize base: Konflux and the target app can be on different
-clusters. A Konflux administrator must authorize the reader identity there.
-No target-cluster API permission or mounted service account token is needed.
-
-## Generate and deploy
-
-Requires Python 3.9+ and `oc` with built-in Kustomize support. Generation is local
-and does not contact any service:
-
-```bash
-python3 deploy/configure.py --env-file deploy/.env
-# Validate rendering without printing the Secret contents:
-oc kustomize deploy/.generated > /dev/null
-
-# Use the context for your application cluster, not the Konflux reader context.
-oc config use-context YOUR_APP_CLUSTER_CONTEXT
-oc project your-namespace
-# If the project does not exist and you have permission: oc new-project your-namespace
-oc apply -k deploy/.generated
-oc -n your-namespace rollout status deployment/release-readiness --timeout=300s
-oc -n your-namespace get route release-readiness -o jsonpath='https://{.spec.host}{"\n"}'
-oc -n your-namespace logs deployment/release-readiness --tail=100
-```
-
-If you change `NAMESPACE`, use that project in the commands. The overlay explicitly
-sets namespaces; it does not create a Project. Apply **the generated overlay**,
-not the base directory. `deploy/.generated/` is ignored by Git and contains
-plaintext credentials in owner-only files; rendered YAML also contains Secrets.
-
-The app uses a single replica and Recreate updates for SQLite. An existing
-`release-readiness-data` PVC is reused; back it up before upgrading. Its storage
-class cannot be changed in place, and resizing depends on the storage provider.
-Leaving `STORAGE_CLASS` blank selects the cluster default for a new PVC.
-
-The injected CA bundle must trust your internal endpoints. Ensure the target
-cluster can reach JIRA, GitLab, Konflux, ART, Sippy, GitHub, GCS, and the registries.
-HTTP health means the server is running; `/api/v1/sync-status` shows ingestion
-failures separately. The Route provides TLS, but the app has no login layer;
-apply your organization's access controls before exposing internal release data.
-
-## Update or rotate credentials
-
-Edit `deploy/.env` or its referenced files, rerun `configure.py`, and apply the
-overlay again. ConfigMap/Secret name hashes change their Deployment references,
-triggering a rollout. Prefer a new image digest/tag for each release; if reusing
-a tag with unchanged configuration, explicitly restart the Deployment:
-
-```bash
-python3 deploy/configure.py
-oc apply -k deploy/.generated
-oc -n your-namespace rollout restart deployment/release-readiness
-oc -n your-namespace rollout status deployment/release-readiness --timeout=300s
-```
-
-Older generated Secrets and ConfigMaps are retained by `oc apply`; remove them
-only after confirming they are no longer referenced by workloads or needed for
-rollback. Do not use broad pruning that could remove the database PVC.
-
-To stop the app while preserving its database and configuration:
-
-```bash
-oc -n your-namespace scale deployment/release-readiness --replicas=0
-```
-
-`oc delete -k deploy/.generated` also deletes the PVC and can destroy its data.
-Use explicit resource deletion if you want to preserve the database.
-
-## Local verification
-
-```bash
-python3 -m unittest discover -s deploy -p 'test_*.py'
-```
-
-Tests use dummy credentials and local Kustomize rendering; no cluster is contacted.
-This directory replaces the former version-specific deployment snapshots.
-The base lives in `deploy/base/`; the generated overlay adds namespace, image,
-settings, and Secrets. Render tests additionally require PyYAML.
+- **Storage class** — `app.yaml` leaves the PVC on the cluster default;
+  patch `storageClassName` where the default is unsuitable (some PaaS
+  clusters only admit specific classes).
+- **`KONFLUX_NAMESPACE`** — defaults to `art-quay-tenant`; set it to the
+  tenant your Konflux apps live in.
+- **`ART_GROUPS`** — the guaranteed floor of ART stream groups; snapshot
+  discovery adds more automatically, so this only needs the streams you
+  want scanned even before any snapshot exists.
+- **Route host** — leave it unset for the cluster default, or set
+  `spec.host` to share a hostname with path-based routing.
