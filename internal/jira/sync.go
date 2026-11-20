@@ -155,15 +155,16 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 				ReleaseTicketAssignee: rel.Assignee,
 				KonfluxApplication:    rel.KonfluxApplication,
 			}
-			versionInfo, ok := versions[rel.FixVersion]
-			if ok {
-				rv.Released = versionInfo.Released
+			// A closed release ticket is the release evidence. The project
+			// version list often leaves shipped versions unreleased, so it
+			// only contributes metadata here, never a veto.
+			rv.Released = true
+			if versionInfo, ok := versions[rel.FixVersion]; ok {
 				rv.Archived = versionInfo.Archived
 				if t, err := time.Parse(time.DateOnly, versionInfo.ReleaseDate); err == nil {
 					rv.ReleaseDate = &t
 				}
 			} else {
-				rv.Released = true
 				// The reconciliation below syncs issues only for versions
 				// the project list knows; this one exists by its closed
 				// ticket alone, so scope it here.
@@ -193,7 +194,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		dbv.Released = versionInfo.Released
+		dbv.Released = dbv.Released || versionInfo.Released
 		dbv.Archived = versionInfo.Archived
 		if t, err := time.Parse(time.DateOnly, versionInfo.ReleaseDate); err == nil {
 			dbv.ReleaseDate = &t
