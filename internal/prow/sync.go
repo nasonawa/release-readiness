@@ -100,10 +100,12 @@ type Store interface {
 	ListProwRunStarts(ctx context.Context, jobName string) ([]Run, error)
 }
 
-// Syncer polls configured job prefixes and upserts their runs.
+// Syncer polls discovered job prefixes and upserts their runs.
 type Syncer struct {
-	client   *Client
-	store    Store
+	client *Client
+	store  Store
+	// jobs is an in-package test seam: extra jobs beyond the inventory.
+	// Production always discovers jobs through Inventory.
 	jobs     []Job
 	interval time.Duration
 	logger   *slog.Logger
@@ -111,17 +113,15 @@ type Syncer struct {
 	Status *syncstatus.Source
 	// Retention, when set, skips runs older than it that are not stored.
 	Retention time.Duration
-	// Pattern, when set, adds the jobs it matches to jobs each pass; a job
-	// in jobs keeps its application.
-	Pattern   *JobPattern
+	// Inventory supplies the discovered periodic jobs each pass.
 	Inventory InventoryStore
 	// WindowStart enables candidate-driven lookup for direct GCS mode too.
 	WindowStart func(context.Context, string) (time.Time, error)
 	Lookback    time.Duration
 }
 
-func NewSyncer(client *Client, store Store, jobs []Job, interval time.Duration, logger *slog.Logger) *Syncer {
-	return &Syncer{client: client, store: store, jobs: jobs, interval: interval, logger: logger}
+func NewSyncer(client *Client, store Store, interval time.Duration, logger *slog.Logger) *Syncer {
+	return &Syncer{client: client, store: store, interval: interval, logger: logger}
 }
 
 // Run syncs immediately and then every interval until ctx is cancelled.
@@ -183,40 +183,23 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 	}
 }
 
-// discover returns the configured jobs and those Pattern matches in the
-// bucket. On a listing failure it returns the configured jobs.
+// discover returns the inventory's jobs plus any set directly on the
+// syncer (tests only). Without an inventory it returns those jobs alone.
 func (s *Syncer) discover(ctx context.Context) ([]Job, error) {
-	if s.Inventory != nil {
-		definitions, revision, err := s.Inventory.JobInventory(ctx)
-		if err != nil {
-			return s.jobs, err
-		}
-		if revision == "" {
-			return s.jobs, fmt.Errorf("awaiting complete periodic inventory")
-		}
-		jobs := slices.Clone(s.jobs)
-		for _, d := range definitions {
-			if !d.Removed && !slices.ContainsFunc(jobs, func(j Job) bool { return j.Name == d.Name }) {
-				jobs = append(jobs, d.Job())
-			}
-		}
-		return jobs, nil
-	}
-
-	if s.Pattern == nil {
+	if s.Inventory == nil {
 		return s.jobs, nil
 	}
-	names, err := s.client.listDirs(ctx, "logs/", s.Pattern.prefix)
+	definitions, revision, err := s.Inventory.JobInventory(ctx)
 	if err != nil {
 		return s.jobs, err
 	}
+	if revision == "" {
+		return s.jobs, fmt.Errorf("awaiting complete periodic inventory")
+	}
 	jobs := slices.Clone(s.jobs)
-	for _, name := range names {
-		if slices.ContainsFunc(s.jobs, func(j Job) bool { return j.Name == name }) {
-			continue
-		}
-		if job, ok := s.Pattern.job(name); ok {
-			jobs = append(jobs, job)
+	for _, d := range definitions {
+		if !d.Removed && !slices.ContainsFunc(jobs, func(j Job) bool { return j.Name == d.Name }) {
+			jobs = append(jobs, d.Job())
 		}
 	}
 	return jobs, nil

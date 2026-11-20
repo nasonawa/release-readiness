@@ -338,7 +338,9 @@ func experimentSyncer(a *experimentAPI, store Store, jobs []experimentJob) *Sync
 	for _, j := range jobs {
 		configured = append(configured, j.prowJob())
 	}
-	return NewSyncer(NewClient(a.server.URL), store, configured, time.Minute, slog.New(slog.DiscardHandler))
+	s := NewSyncer(NewClient(a.server.URL), store, time.Minute, slog.New(slog.DiscardHandler))
+	s.jobs = configured
+	return s
 }
 
 func TestSippyExperimentRequestComparison(t *testing.T) {

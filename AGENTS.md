@@ -61,11 +61,9 @@ Flags (env fallback in parentheses; defaults point at production services):
   (`JIRA_WRITE_TOKEN`), a credential separate from the read one, are set.
 - `-art-build-history-url`, `-tekton-results-url`, `-catalog-url`,
   `-art-fbc-quay-url`: empty disables that source.
-- Prow: `-prow-jobs` (`PROW_JOBS`, `job_name=konflux_application[,...]`),
-  `-prow-job-pattern` (`PROW_JOB_PATTERN`, a `^`-anchored job name regexp
-  whose `major` and `minor` groups give the application
-  `quay-<major>-<minor>`; a `-prow-jobs` entry for the same job wins),
-  `-prow-interval`.
+- Prow: `-prow-job-discovery` (`PROW_JOB_DISCOVERY`) imports the required
+  periodic jobs from openshift/release; CI ingestion is candidate-gated and
+  starts only for streams with a dated FBC. `-prow-interval`.
 - Shipment MRs: `-gitlab-url` (empty disables), `-gitlab-token`
   (`GITLAB_TOKEN`; empty reads anonymously), `-shipment-project`,
   `-ocp-build-data-url`, `-gitlab-poll-interval`.
@@ -116,7 +114,7 @@ Each loop is started in `main.go` only when its inputs are set:
 | JIRA (`jira`) | `-jira-token` is set |
 | ART build resolve and history, FBC render, FBC JIRA reconciler (`art-builds`, `art-history`, `fbc-render`, `reconcile`) | `-art-build-history-url` is set |
 | Catalog (`catalog`) | `-catalog-url` is set |
-| Prow (`prow`) | `-prow-jobs` names a job or `-prow-job-pattern` is set |
+| Prow (`prow`) | `-prow-job-discovery` is set |
 | GitLab shipment MRs (`shipment-mrs`) | `-gitlab-url` is set |
 | Retention prune (`retention`) | `-retention` is above 0 |
 | Image scans (`image-scans`) | `-tekton-results-url` is set, the kube client exists, ART is enabled, and the credential has a bearer token |

@@ -14,7 +14,7 @@ The portfolio starts with all products. Cards stay at `x.y`, with the next `x.y.
 
 See [the backend workflow diagram](architecture.md) for collection and matching.
 
-Dynamic periodic discovery establishes the expected denominator and schedules CI ingestion for matching release candidates. Streams without matching configured periodics show “No CI configured.” The optional legacy `-validation-plan` mode requires an operator-supplied plan and separate `PROW_JOBS` or `PROW_JOB_PATTERN` configuration. Exact-FBC identity is the supported gating adapter; standalone/image-only jobs need suitable image-identity evidence. The UI distinguishes missing historical FBC records or stream fallback FBCs from confirmed release-specific publication.
+Dynamic periodic discovery establishes the expected denominator and schedules CI ingestion for matching release candidates. Streams without matching configured periodics show “No CI configured.” The optional legacy `-validation-plan` mode requires an operator-supplied plan. Exact-FBC identity is the supported gating adapter; standalone/image-only jobs need suitable image-identity evidence. The UI distinguishes missing historical FBC records or stream fallback FBCs from confirmed release-specific publication.
 
 ## Release and API data semantics
 
