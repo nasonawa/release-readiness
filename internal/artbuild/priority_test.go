@@ -104,6 +104,31 @@ func TestARTBudgetPauseIsNotSourceFailure(t *testing.T) {
 	}
 }
 
+// Discovered groups join the configured ones in scheduling: a snapshot-derived
+// current stream runs in the foreground, a configured historical one keeps to
+// the backfill rotation.
+func TestARTDiscoveredGroupsJoinScheduling(t *testing.T) {
+	f := &fakeART{}
+	h, store := syncWith(t, f) // Groups: quay-3.17
+	store.apps = []string{"quay-3-18"}
+	h.Activity = func(context.Context) (map[string]bool, error) {
+		return map[string]bool{"quay-3-17": false, "quay-3-18": true}, nil
+	}
+	h.BackfillInterval = time.Hour
+	h.BackfillBudget = time.Second
+	h.SyncOnce(t.Context())
+	// The foreground phase scans only the discovered active stream.
+	for _, q := range f.searches[:refreshDays] {
+		if q.Get("group") != "quay-3.18" {
+			t.Fatalf("foreground searched %v, want only the discovered stream", q)
+		}
+	}
+	// The configured historical stream keeps its backfill turn.
+	if !slices.ContainsFunc(f.searches, func(q url.Values) bool { return q.Get("group") == "quay-3.17" }) {
+		t.Fatal("backfill skipped the configured historical stream")
+	}
+}
+
 func TestARTConfiguredGroupsWithoutSnapshotsOrPrioritySource(t *testing.T) {
 	f := &fakeART{}
 	h, store := syncWith(t, f)

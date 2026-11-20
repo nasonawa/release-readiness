@@ -75,7 +75,7 @@ below are not automatically the deployed values.
 | `-art-current-budget` | — | 2m | Current-release ART history work per pass |
 | `-art-history-interval` | — | 1h | One ART backfill stream per interval; 0 disables |
 | `-art-history-budget` | — | 30s | Historical ART and source metadata budget |
-| `-art-groups` | `ART_GROUPS` | empty | Explicit comma-separated ART groups, e.g. `quay-3.18,quay-5.0`; empty waits for configuration |
+| `-art-groups` | `ART_GROUPS` | empty | Configured comma-separated ART groups, e.g. `quay-3.18,quay-5.0`: the guaranteed floor, with groups derived from stored Konflux snapshots added; empty waits for configuration or snapshots |
 | `-validation-plan` | `VALIDATION_PLAN` | empty | Optional legacy required-job JSON; ignored when dynamic discovery is enabled |
 
 ## Validation and source selection
