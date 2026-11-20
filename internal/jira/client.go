@@ -121,6 +121,48 @@ func ParseVersionFromSummary(summary string) (product, version string, ok bool) 
 	return product, version, true
 }
 
+// DiscoverReleasedReleases queries JIRA for release tickets closed within
+// window, so a version whose ticket closed before this app first ran still
+// gets a release row. Returns the same shape as DiscoverActiveReleases.
+func (c *Client) DiscoverReleasedReleases(ctx context.Context, window time.Duration) ([]ActiveRelease, error) {
+	days := int(window.Hours() / 24)
+	if days < 1 {
+		days = 1
+	}
+	jql := fmt.Sprintf(
+		`project=%s AND component="-area/release" AND status IN (Closed, Done) AND resolved >= -%dd`,
+		c.project, days,
+	)
+	allIssues, err := c.search(ctx, jql, "summary,duedate,assignee", "discover released releases")
+	if err != nil {
+		return nil, err
+	}
+
+	var releases []ActiveRelease
+	for _, issue := range allIssues {
+		product, version, ok := ParseVersionFromSummary(issue.Fields.Summary)
+		if !ok {
+			continue
+		}
+		fixVersion := product + "-v" + version
+		assignee := ""
+		if issue.Fields.Assignee != nil {
+			assignee = issue.Fields.Assignee.DisplayName
+		}
+		rel := ActiveRelease{
+			FixVersion:         fixVersion,
+			ReleaseTicketKey:   issue.Key,
+			Assignee:           assignee,
+			KonfluxApplication: FixVersionToKonfluxApp(fixVersion),
+		}
+		if t, err := time.Parse(time.DateOnly, issue.Fields.DueDate); err == nil {
+			rel.DueDate = &t
+		}
+		releases = append(releases, rel)
+	}
+	return releases, nil
+}
+
 // DiscoverActiveReleases queries JIRA for active release tickets using the -area/release component.
 // Returns releases that are not Closed/Done, each with their fixVersion (parsed from
 // the ticket summary), dueDate, and ticket key.

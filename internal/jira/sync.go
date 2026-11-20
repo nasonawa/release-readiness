@@ -35,6 +35,10 @@ type Syncer struct {
 	Workers int
 }
 
+// releasedDiscoveryWindow bounds how far back closed release tickets are
+// discovered each pass: old z-streams beyond it stay undiscovered.
+const releasedDiscoveryWindow = 180 * 24 * time.Hour
+
 // NewSyncer creates a Syncer that uses client to fetch data and store to persist it.
 func NewSyncer(client *Client, store Store, withTx TxFunc, logger *slog.Logger) *Syncer {
 	return &Syncer{client: client, store: store, withTx: withTx, logger: logger, Workers: 2}
@@ -126,6 +130,49 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 
 		if !slices.Contains(scopes, rel.FixVersion) {
 			scopes = append(scopes, rel.FixVersion)
+		}
+	}
+
+	// Backfill versions whose release ticket closed before this app first
+	// ran: without a row, the reconciliation below cannot see them, and the
+	// portfolio's history and available stage stay empty on a fresh
+	// database. The JIRA project version list stays the authority for the
+	// released flag; a closed ticket is the evidence when it lacks the
+	// version.
+	released, releasedErr := s.client.DiscoverReleasedReleases(ctx, releasedDiscoveryWindow)
+	if releasedErr != nil {
+		s.logger.Error("discover released releases", "error", releasedErr)
+		pass.Add(fmt.Errorf("discover released releases: %w", releasedErr))
+	} else {
+		s.logger.Info("discovered released releases", "count", len(released))
+		for _, rel := range released {
+			if activeSet[rel.FixVersion] {
+				continue
+			}
+			rv := &model.ReleaseVersion{
+				Name:                  rel.FixVersion,
+				ReleaseTicketKey:      rel.ReleaseTicketKey,
+				ReleaseTicketAssignee: rel.Assignee,
+				KonfluxApplication:    rel.KonfluxApplication,
+			}
+			versionInfo, ok := versions[rel.FixVersion]
+			if ok {
+				rv.Released = versionInfo.Released
+				rv.Archived = versionInfo.Archived
+				if t, err := time.Parse(time.DateOnly, versionInfo.ReleaseDate); err == nil {
+					rv.ReleaseDate = &t
+				}
+			} else {
+				rv.Released = true
+				// The reconciliation below syncs issues only for versions
+				// the project list knows; this one exists by its closed
+				// ticket alone, so scope it here.
+				scopes = append(scopes, rel.FixVersion)
+			}
+			if err := s.store.UpsertReleaseVersion(ctx, rv); err != nil {
+				s.logger.Error("upsert released version", "version", rel.FixVersion, "error", err)
+				pass.Add(fmt.Errorf("upsert version %s: %w", rel.FixVersion, err))
+			}
 		}
 	}
 
