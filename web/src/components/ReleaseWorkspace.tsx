@@ -9,7 +9,6 @@ import {
 	TabTitleText,
 	Title,
 } from "@patternfly/react-core";
-import { ExternalLinkAltIcon } from "@patternfly/react-icons";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -72,38 +71,40 @@ export default function ReleaseWorkspace({
 					</Title>
 					{freshness}
 				</div>
-				<FormSelect
-					aria-label="Switch release"
-					value={release.name}
-					onChange={(_, value) => {
-						const next = new URLSearchParams(params);
-						next.delete("ci");
-						next.delete("job");
-						next.delete("cell");
-						navigate(`/releases/${encodeURIComponent(value)}?${next}`);
-					}}
-				>
-					{!versions.data?.some((v) => v.release.name === release.name) && (
-						<FormSelectOption
-							value={release.name}
-							label={formatReleaseName(release.name)}
-						/>
-					)}
-					{versions.data
-						?.slice()
-						.sort((a, b) =>
-							b.release.name.localeCompare(a.release.name, undefined, {
-								numeric: true,
-							}),
-						)
-						.map((v) => (
-							<FormSelectOption
-								value={v.release.name}
-								key={v.release.name}
-								label={formatReleaseName(v.release.name)}
-							/>
-						))}
-				</FormSelect>
+				<label className="rr-version-switch">
+					Switch release
+					<select
+						aria-label="Switch release"
+						value={release.name}
+						onChange={(e) => {
+							const next = new URLSearchParams(params);
+							next.delete("ci");
+							next.delete("job");
+							next.delete("cell");
+							navigate(
+								`/releases/${encodeURIComponent(e.target.value)}?${next}`,
+							);
+						}}
+					>
+						{!versions.data?.some((v) => v.release.name === release.name) && (
+							<option value={release.name}>
+								{formatReleaseName(release.name)}
+							</option>
+						)}
+						{versions.data
+							?.slice()
+							.sort((a, b) =>
+								b.release.name.localeCompare(a.release.name, undefined, {
+									numeric: true,
+								}),
+							)
+							.map((v) => (
+								<option value={v.release.name} key={v.release.name}>
+									{formatReleaseName(v.release.name)}
+								</option>
+							))}
+					</select>
+				</label>
 			</div>
 			<Tabs
 				activeKey={active}
@@ -295,8 +296,7 @@ function ValidationWorkbench({
 							<tr key={row.job}>
 								<td>
 									<a href={row.source_url} target="_blank" rel="noreferrer">
-										{row.display_name || row.mode || row.job}{" "}
-										<ExternalLinkAltIcon />
+										{row.display_name || row.mode || row.job} ↗
 									</a>
 									<p className="rr-muted">
 										{[row.cloud, row.storage].filter(Boolean).join(" / ")}
@@ -317,9 +317,8 @@ function ValidationWorkbench({
 									{row.run_url ? (
 										<a href={row.run_url} target="_blank" rel="noreferrer">
 											{row.state === "missing"
-												? "Open observed run "
-												: "Open Prow run "}
-											<ExternalLinkAltIcon />
+												? "Open observed run ↗"
+												: "Open Prow run ↗"}
 										</a>
 									) : (
 										"No verified candidate run"
@@ -451,7 +450,7 @@ function FBCRecord({
 								<li key={`${m.operator}-${m.ocp}-${m.digest}`}>
 									{m.build_url ? (
 										<a href={m.build_url} target="_blank" rel="noreferrer">
-											{m.nvr || "ART build"} <ExternalLinkAltIcon />
+											{m.nvr || "ART build"} ↗
 										</a>
 									) : (
 										m.nvr || "Build identity unresolved"
