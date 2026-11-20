@@ -152,11 +152,14 @@ export default function ReleasePortfolio() {
 					.toLowerCase()
 					.includes(query.toLowerCase()),
 		);
-	// Both views show the same set: upcoming releases plus each stream's
-	// latest published z-stream, so a stream like 3.9 whose every release
-	// shipped still shows its newest one. History adds earlier z-streams.
+	// The stages view shows upcoming releases plus each stream's latest
+	// published z-stream, so a stream like 3.9 whose every release shipped
+	// still shows its newest one; history adds earlier z-streams. The table
+	// shows only in-flight releases: released ones wait for history.
 	const staged = stageReleases(filtered, history);
-	const rows = staged;
+	const rows = history
+		? staged
+		: filtered.filter((ov) => !ov.shipped && !ov.release.released);
 	return (
 		<PageSection className="rr-page">
 			<div className="rr-portfolio-heading">
@@ -215,7 +218,9 @@ export default function ReleasePortfolio() {
 			<p className="rr-muted rr-scope-note">
 				{history
 					? "Showing all recorded z-streams, including earlier releases."
-					: "Showing upcoming releases and the latest published z-stream in each stream. Enable history for earlier releases."}
+					: layout === "table"
+						? "Showing upcoming releases only. Enable history to include released ones."
+						: "Showing upcoming releases and the latest published z-stream in each stream. Enable history for earlier releases."}
 			</p>
 			{!(layout === "table" ? rows.length : staged.length) && (
 				<EmptyState
