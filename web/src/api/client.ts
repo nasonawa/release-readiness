@@ -10,9 +10,15 @@ import type {
 	Validation,
 } from "./types";
 
-// import.meta.env.BASE_URL carries the Vite base ("/" or e.g. "/v2/")
-// so API calls follow the prefix the app is served under.
-const BASE = `${import.meta.env.BASE_URL}api/v1`;
+// import.meta.env.BASE_URL carries the Vite base, but builds render it
+// without a trailing slash ("/v2", while dev gives "/"), so normalize
+// before joining the API path.
+export function apiBase(baseUrl: string): string {
+	const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+	return `${base}api/v1`;
+}
+
+const BASE = apiBase(import.meta.env.BASE_URL);
 
 async function fetchJSON<T>(url: string): Promise<T> {
 	const res = await fetch(url);
