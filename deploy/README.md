@@ -1,8 +1,8 @@
 # OpenShift deployment with Kustomize
 
 This setup deploys the backend and embedded UI, a persistent SQLite volume,
-Service, HTTPS Route, service account, injected trusted CA bundle, configuration,
-and credentials. It uses dynamic Prow periodic discovery; no static validation
+Service, HTTPS Route, injected trusted CA bundle, configuration, and
+credentials. It uses dynamic Prow periodic discovery; no static validation
 plan or generator matrix is required. JIRA writes are disabled.
 
 The example image is `quay.io/your-org/release-readiness:v2.2`. Replace
