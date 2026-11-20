@@ -247,9 +247,13 @@ function AppRoutes() {
 	);
 }
 
+// Serve the router under the same prefix the bundle was built for.
+const routerBasename =
+	import.meta.env.BASE_URL === "/" ? undefined : import.meta.env.BASE_URL;
+
 export default function App() {
 	return (
-		<BrowserRouter>
+		<BrowserRouter basename={routerBasename}>
 			<AppLayout>
 				<AppRoutes />
 			</AppLayout>

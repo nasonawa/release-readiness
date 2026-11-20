@@ -4,6 +4,8 @@ DOCKER ?= docker
 VERSION ?= v2.2
 IMAGE ?= release-readiness:latest
 ENV_FILE ?= .env
+# URL prefix baked into the web bundle; must match the server -base-path.
+VITE_BASE ?= /
 REVISION := $(shell git rev-parse HEAD)
 
 export RR_ENV_FILE := $(abspath $(ENV_FILE))
@@ -67,6 +69,7 @@ lint:
 
 build:
 	$(DOCKER) build -f deploy/Containerfile --build-arg APP_VERSION="$(VERSION)" \
+	  --build-arg VITE_BASE="$(VITE_BASE)" \
 	  --label org.opencontainers.image.revision="$(REVISION)" -t "$(IMAGE)" .
 
 push:

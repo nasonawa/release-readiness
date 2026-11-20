@@ -29,6 +29,11 @@ type Server struct {
 	ArtFBC          *artfbc.Client
 	ValidationPlans map[string]release.ValidationPlan
 	InventoryPlans  *release.PlanRegistry
+	// BasePath is the URL prefix the app is served under (e.g. /v2 behind a
+	// path-based route); requests are stripped of it before routing. Empty
+	// serves at the root. The web bundle must be built with the same prefix
+	// (VITE_BASE) for asset and API URLs to match.
+	BasePath string
 }
 
 // New builds the server.
@@ -38,6 +43,7 @@ func New(database *db.DB, addr, jiraBaseURL, jiraProject string, selector *relea
 	s.registerRoutes(mux)
 
 	var handler http.Handler = mux
+	handler = s.stripBasePath(handler)
 	handler = loggingMiddleware(logger, handler)
 	handler = recoveryMiddleware(logger, handler)
 

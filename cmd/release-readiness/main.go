@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -40,6 +41,7 @@ func main() {
 
 	// Konflux flags
 	kubeconfig := flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "kubeconfig path (empty uses the in-cluster service account)")
+	basePath := flag.String("base-path", os.Getenv("BASE_PATH"), "URL prefix the app is served under (e.g. /v2), stripped from requests before routing; empty serves at the root")
 	namespace := flag.String("namespace", cmp.Or(os.Getenv("KONFLUX_NAMESPACE"), "art-quay-tenant"), "Konflux namespace to read Snapshots and Releases from")
 	konfluxPollInterval := flag.Duration("konflux-poll-interval", 30*time.Second, "Konflux sync poll interval")
 	konfluxUIURL := flag.String("konflux-ui-url", cmp.Or(os.Getenv("KONFLUX_UI_URL"), "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com"), "Konflux UI URL for links to -namespace's applications, Snapshots and Releases (empty disables Konflux links)")
@@ -116,6 +118,10 @@ func main() {
 			logger.Error("worker counts must be between 1 and 64")
 			os.Exit(1)
 		}
+	}
+	if *basePath != "" && (!strings.HasPrefix(*basePath, "/") || *basePath == "/" || strings.HasSuffix(*basePath, "/")) {
+		logger.Error("base path must look like /v2: leading slash, no trailing slash, not root")
+		os.Exit(1)
 	}
 	if *ciStreamBudget <= 0 || *inventoryInterval <= 0 || *prowInterval <= 0 || *jiraPollInterval <= 0 || *ciLookback < 0 || *legacyInterval < 0 || *historyInterval < 0 || *historyBudget <= 0 || *artCurrentBudget <= 0 || *artHistoryBudget <= 0 || *artHistoryInterval < 0 {
 		logger.Error("invalid sync interval or lookback")
@@ -347,6 +353,7 @@ func main() {
 	srv.ValidationPlans = validationPlans
 	srv.InventoryPlans = inventoryPlans
 	srv.KonfluxUIURL = *konfluxUIURL
+	srv.BasePath = *basePath
 	srv.KonfluxNamespace = *namespace
 
 	if *artFBCQuayURL != "" {
