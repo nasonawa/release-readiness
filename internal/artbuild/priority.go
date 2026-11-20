@@ -20,7 +20,8 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 		activity = nil
 	}
 	var active, historical []string
-	for _, group := range h.Groups {
+	var discovery syncstatus.Pass
+	for _, group := range h.unionGroups(ctx, &discovery) {
 		app := strings.ReplaceAll(group, ".", "-")
 		if current, known := activity[app]; !known || current {
 			active = append(active, group)
@@ -29,8 +30,9 @@ func (h *HistorySync) syncPrioritized(ctx context.Context) {
 		}
 	}
 	if len(active) == 0 && len(historical) == 0 {
-		h.Status.Report(errWaitingForStreams)
-		h.logger.Info("ART waiting for group configuration")
+		discovery.Add(errWaitingForStreams)
+		h.Status.Report(discovery.Err())
+		h.logger.Info("ART waiting for stream discovery")
 		return
 	}
 	slices.Sort(active)
