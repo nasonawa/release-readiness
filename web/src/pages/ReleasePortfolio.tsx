@@ -412,27 +412,44 @@ function ReleaseRow({
 	);
 }
 
-/** The release's state as an icon and a status-coloured label. */
+/** The release's state as an icon and a status-coloured label; the icon
+ * carries its meaning in a tooltip. */
 function StatusLabel({ ov }: { ov: ReleaseOverview }) {
 	const label = portfolioLabel(ov);
 	const failed = (ov.portfolio?.validation.failed ?? 0) > 0;
-	const icon = ov.published ? (
-		<Icon status="success">
-			<CheckCircleIcon />
-		</Icon>
-	) : failed ? (
-		<Icon status="danger">
-			<TimesCircleIcon />
-		</Icon>
-	) : ov.portfolio?.validation.ready ? (
-		<Icon status="success">
-			<CheckCircleIcon />
-		</Icon>
-	) : ov.portfolio?.verdict ? (
-		<Icon status="info">
-			<InfoCircleIcon />
-		</Icon>
-	) : null;
+	const icon = (
+		<Tooltip
+			content={
+				ov.published
+					? "Published to customers: the catalog lists this released version"
+					: failed
+						? "A required validation job failed"
+						: ov.portfolio?.validation.ready
+							? "Every required validation job passed for the selected FBC"
+							: "Release evidence is available; validation is not complete yet"
+			}
+		>
+			<span>
+				{ov.published ? (
+					<Icon status="success">
+						<CheckCircleIcon />
+					</Icon>
+				) : failed ? (
+					<Icon status="danger">
+						<TimesCircleIcon />
+					</Icon>
+				) : ov.portfolio?.validation.ready ? (
+					<Icon status="success">
+						<CheckCircleIcon />
+					</Icon>
+				) : ov.portfolio?.verdict ? (
+					<Icon status="info">
+						<InfoCircleIcon />
+					</Icon>
+				) : null}
+			</span>
+		</Tooltip>
+	);
 	const color = ov.published
 		? "green"
 		: ov.portfolio?.validation.ready
